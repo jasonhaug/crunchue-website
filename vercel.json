@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/aigirlfriend/:path*",
-      "destination": "https://toxic-ai-girlfriend.vercel.app/:path*"
+      "destination": "https://toxic-ai-girlfriend.vercel.app/aigirlfriend/:path*"
     }
   ]
 }
