@@ -289,46 +289,27 @@ export default function Home() {
             points.push({ x, y, t });
           }
 
-          // Draw inner + mid as one continuous gold-to-silver gradient
-          // Smooth cosine fade from gold to silver over first 30%
-          const goldFadeEnd = 0.3;
-          const goldR = 180, goldG = 145, goldB = 55;
-          const combPoints = points.filter(pt => pt.t <= midEnd + 0.02);
-          for (let ci = 0; ci < combPoints.length - 1; ci++) {
-            const pt0 = combPoints[ci];
-            const pt1 = combPoints[ci + 1];
-            // Cosine ease for smooth falloff — no harsh edge
-            const rawBlend = Math.max(0, 1 - pt0.t / goldFadeEnd);
-            const goldBlend = rawBlend * rawBlend * (3 - 2 * rawBlend); // smoothstep
-            const silverGrey = Math.floor(130 + f.midBright * 220);
-            const r = Math.floor(silverGrey + goldBlend * (goldR - silverGrey));
-            const g = Math.floor(silverGrey + goldBlend * (goldG - silverGrey));
-            const b = Math.floor((silverGrey + 8) + goldBlend * (goldB - silverGrey - 8));
-            // Smooth width transition
-            const widthT = Math.min(1, pt0.t / 0.15);
-            const widthBlend = f.innerWidth + (f.midWidth - f.innerWidth) * widthT;
-            // Consistent opacity — no bright ring at center
-            const alphaBlend = f.midBright;
+          // Draw entire fiber as one gold-to-silver gradient from iris to noise
+          const goldR = 190, goldG = 155, goldB = 55;
+          const silverR = 160, silverG = 160, silverB = 168;
+          for (let pi = 0; pi < points.length - 1; pi++) {
+            const pt0 = points[pi];
+            const pt1 = points[pi + 1];
+            // t goes 0 (pupil) to 1+ (noise ring)
+            // Gold at 0, smoothly to silver by ~0.8
+            const raw = Math.min(1, pt0.t / 0.8);
+            const blend = raw * raw * (3 - 2 * raw); // smoothstep
+            const r = Math.floor(goldR + blend * (silverR - goldR));
+            const g = Math.floor(goldG + blend * (silverG - goldG));
+            const b = Math.floor(goldB + blend * (silverB - goldB));
+            const alpha = f.midBright;
             ctx.beginPath();
             ctx.moveTo(pt0.x, pt0.y);
             ctx.lineTo(pt1.x, pt1.y);
-            ctx.strokeStyle = `rgba(${r}, ${g}, ${Math.max(0, b)}, ${alphaBlend})`;
-            ctx.lineWidth = widthBlend;
+            ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+            ctx.lineWidth = f.midWidth;
             ctx.stroke();
           }
-
-          // Draw outer zone
-          ctx.beginPath();
-          let started = false;
-          for (const pt of points) {
-            if (pt.t < midEnd - 0.01) continue;
-            if (!started) { ctx.moveTo(pt.x, pt.y); started = true; }
-            else ctx.lineTo(pt.x, pt.y);
-          }
-          const outerGrey = Math.floor(110 + f.outerBright * 250);
-          ctx.strokeStyle = `rgba(${outerGrey}, ${outerGrey}, ${outerGrey + 10}, ${f.outerBright})`;
-          ctx.lineWidth = f.outerWidth;
-          ctx.stroke();
         }
       };
 
