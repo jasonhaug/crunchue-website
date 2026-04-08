@@ -297,19 +297,25 @@ export default function Home() {
           ctx.lineWidth = f.innerWidth;
           ctx.stroke();
 
-          // Draw mid zone
-          ctx.beginPath();
-          started = false;
-          for (const pt of points) {
-            if (pt.t < innerEnd - 0.01) continue;
-            if (pt.t > midEnd + 0.02) break;
-            if (!started) { ctx.moveTo(pt.x, pt.y); started = true; }
-            else ctx.lineTo(pt.x, pt.y);
+          // Draw mid zone — gold-to-silver gradient over first 4x inner zone size
+          const goldFadeEnd = innerEnd + (innerEnd * 4); // gold gradient extends 4x inner zone
+          const midPoints = points.filter(pt => pt.t >= innerEnd - 0.01 && pt.t <= midEnd + 0.02);
+          for (let mi = 0; mi < midPoints.length - 1; mi++) {
+            const pt0 = midPoints[mi];
+            const pt1 = midPoints[mi + 1];
+            // Blend from gold to silver
+            const goldBlend = Math.max(0, 1 - (pt0.t - innerEnd) / (goldFadeEnd - innerEnd));
+            const silverGrey = Math.floor(130 + f.midBright * 220);
+            const r = Math.floor(silverGrey + goldBlend * (180 - silverGrey + f.midBright * 30));
+            const g = Math.floor(silverGrey + goldBlend * (140 - silverGrey + f.midBright * 10));
+            const b = Math.floor((silverGrey + 8) + goldBlend * (40 - silverGrey - 8));
+            ctx.beginPath();
+            ctx.moveTo(pt0.x, pt0.y);
+            ctx.lineTo(pt1.x, pt1.y);
+            ctx.strokeStyle = `rgba(${r}, ${g}, ${Math.max(0, b)}, ${f.midBright})`;
+            ctx.lineWidth = f.midWidth;
+            ctx.stroke();
           }
-          const midGrey = Math.floor(130 + f.midBright * 220);
-          ctx.strokeStyle = `rgba(${midGrey}, ${midGrey}, ${midGrey + 8}, ${f.midBright})`;
-          ctx.lineWidth = f.midWidth;
-          ctx.stroke();
 
           // Draw outer zone
           ctx.beginPath();
