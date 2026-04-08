@@ -172,19 +172,63 @@ export default function Home() {
       });
     }
 
-    // Stars
+    // Stars — spread across a huge area so zooming out reveals more
     const stars: { x: number; y: number; size: number; brightness: number; twinkleSpeed: number; phase: number }[] = [];
     const initStars = (w: number, h: number) => {
       stars.length = 0;
-      for (let i = 0; i < 1200; i++) {
+      const spread = 10; // 10x screen size in each direction
+      for (let i = 0; i < 4000; i++) {
         stars.push({
-          x: Math.random() * w, y: Math.random() * h,
+          x: w / 2 + (Math.random() - 0.5) * w * spread,
+          y: h / 2 + (Math.random() - 0.5) * h * spread,
           size: 0.3 + Math.random() * 1.5,
           brightness: 0.2 + Math.random() * 0.8,
           twinkleSpeed: 0.5 + Math.random() * 3,
           phase: Math.random() * Math.PI * 2,
         });
       }
+    };
+
+    // Fog/cloud noise — large ambient texture that circles outside the eye
+    let fogCanvas: HTMLCanvasElement;
+    const buildFogTexture = (size: number) => {
+      fogCanvas = document.createElement("canvas");
+      fogCanvas.width = size;
+      fogCanvas.height = size;
+      const fctx = fogCanvas.getContext("2d")!;
+      const imageData = fctx.createImageData(size, size);
+      const data = imageData.data;
+      const ctr = size / 2;
+      // Multiple octaves of noise for cloud-like feel
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          const dx = x - ctr;
+          const dy = y - ctr;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const idx = (y * size + x) * 4;
+          const innerR = size * 0.15;
+          const outerR = size * 0.48;
+
+          if (dist > innerR && dist < outerR) {
+            const ringMid = (innerR + outerR) / 2;
+            const ringHalf = (outerR - innerR) / 2;
+            const ringPos = 1 - Math.abs(dist - ringMid) / ringHalf;
+            const falloff = Math.pow(ringPos, 1.5);
+
+            // Multi-scale noise for cloudiness
+            const n1 = Math.random();
+            const n2 = Math.random();
+            const combined = n1 * 0.6 + (n2 > 0.7 ? n2 : n2 * 0.1) * 0.4;
+            const val = Math.floor(combined * 100 + 30);
+
+            data[idx] = val;
+            data[idx + 1] = val;
+            data[idx + 2] = val + 5;
+            data[idx + 3] = Math.floor(falloff * combined * 20);
+          }
+        }
+      }
+      fctx.putImageData(imageData, 0, 0);
     };
 
     // Drift particles
@@ -212,6 +256,7 @@ export default function Home() {
       noiseSize = texSize;
       noiseCanvas = buildNoiseTexture(texSize, { innerR: texSize * 0.084, outerR: texSize * 0.228, maxAlpha: 80, clumpy: false });
       noiseCanvas2 = buildNoiseTexture(texSize, { innerR: texSize * 0.072, outerR: texSize * 0.21, maxAlpha: 60, clumpy: true });
+      buildFogTexture(texSize);
       initStars(canvas.width, canvas.height);
       initDrift();
     };
@@ -237,7 +282,7 @@ export default function Home() {
       // Zoom toward mouse position
       const prevZoom = zoom;
       const zoomFactor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-      zoom = Math.max(0.5, Math.min(500, zoom * zoomFactor));
+      zoom = Math.max(0.05, Math.min(500, zoom * zoomFactor));
 
       // Adjust pan so zoom centers on mouse position
       const ratio = zoom / prevZoom;
@@ -302,7 +347,7 @@ export default function Home() {
 
         if (lastTouchDist > 0) {
           const prevZoom = zoom;
-          zoom = Math.max(0.5, Math.min(500, zoom * (dist / lastTouchDist)));
+          zoom = Math.max(0.05, Math.min(500, zoom * (dist / lastTouchDist)));
           const ratio = zoom / prevZoom;
           const cx = canvas.width / 2;
           const cy = canvas.height / 2;
@@ -349,14 +394,19 @@ export default function Home() {
       ctx.fillRect(0, 0, w, h);
       time += 0.002;
 
-      // Apply zoom and pan
+      // Parallax rotation speeds
+      const starRot = time * 0.04;    // stars rotate fastest
+      const fogRot = time * 0.025;    // clouds medium
+      const eyeRot = time * 0.008;    // eye rotates slowest
+
+      // === LAYER 1: Stars (outermost, fastest rotation) ===
       ctx.save();
       ctx.translate(panX, panY);
       ctx.translate(cx, cy);
       ctx.scale(zoom, zoom);
+      ctx.rotate(starRot);
       ctx.translate(-cx, -cy);
 
-      // Stars
       for (const s of stars) {
         const twinkle = 0.3 + 0.7 * Math.pow(Math.sin(time * s.twinkleSpeed + s.phase), 2);
         const grey = Math.floor(180 + s.brightness * 75);
@@ -365,8 +415,32 @@ export default function Home() {
         ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
         ctx.fill();
       }
+      ctx.restore();
 
-      // Noise ring
+      // === LAYER 2: Fog clouds (medium rotation) ===
+      ctx.save();
+      ctx.translate(panX, panY);
+      ctx.translate(cx, cy);
+      ctx.scale(zoom, zoom);
+      ctx.rotate(fogRot);
+      ctx.drawImage(fogCanvas, -noiseSize / 2, -noiseSize / 2);
+      // Second fog layer counter-rotating slightly
+      ctx.rotate(-fogRot * 1.4);
+      ctx.scale(1.15, 1.15);
+      ctx.globalAlpha = 0.6;
+      ctx.drawImage(fogCanvas, -noiseSize / 2, -noiseSize / 2);
+      ctx.globalAlpha = 1;
+      ctx.restore();
+
+      // === LAYER 3: Eye (slowest rotation) ===
+      ctx.save();
+      ctx.translate(panX, panY);
+      ctx.translate(cx, cy);
+      ctx.scale(zoom, zoom);
+      ctx.rotate(eyeRot);
+      ctx.translate(-cx, -cy);
+
+      // Iris noise ring (rotates with eye + its own spin)
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate(time * 0.08);
