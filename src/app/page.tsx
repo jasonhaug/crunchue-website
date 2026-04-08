@@ -53,7 +53,7 @@ export default function Home() {
     };
 
     // Each fiber has harmonic parameters per zone for cymatics-style paths
-    const fiberCount = 500;
+    const fiberCount = 350;
     const fibers: {
       angle: number;
       // Inner zone: high-order harmonics, tight resonance patterns
@@ -109,7 +109,7 @@ export default function Home() {
 
     // Fine fill fibers
     const fineFibers: typeof fibers = [];
-    for (let i = 0; i < 600; i++) {
+    for (let i = 0; i < 250; i++) {
       const family = Math.floor(Math.random() * 60);
       const familySeed = family * 0.7;
       fineFibers.push({
@@ -141,8 +141,8 @@ export default function Home() {
 
     // Transition fibers — bridge inner spinning angles into mid squiggles
     const transitionFibers: typeof fibers = [];
-    for (let i = 0; i < 350; i++) {
-      const baseAngle = (i / 350) * Math.PI * 2;
+    for (let i = 0; i < 150; i++) {
+      const baseAngle = (i / 150) * Math.PI * 2;
       const family = Math.floor(i / 6);
       const familySeed = family * 0.7;
       transitionFibers.push({
@@ -177,7 +177,7 @@ export default function Home() {
     const initStars = (w: number, h: number) => {
       stars.length = 0;
       const spread = 10; // 10x screen size in each direction
-      for (let i = 0; i < 15000; i++) {
+      for (let i = 0; i < 5000; i++) {
         stars.push({
           x: w / 2 + (Math.random() - 0.5) * w * spread,
           y: h / 2 + (Math.random() - 0.5) * h * spread,
@@ -235,7 +235,7 @@ export default function Home() {
     const driftParticles: { angle: number; radius: number; speed: number; brightness: number; size: number; drift: number }[] = [];
     const initDrift = () => {
       driftParticles.length = 0;
-      for (let i = 0; i < 250; i++) {
+      for (let i = 0; i < 100; i++) {
         driftParticles.push({
           angle: Math.random() * Math.PI * 2,
           radius: 30 + Math.random() * 350,
@@ -420,10 +420,6 @@ export default function Home() {
       ctx.fillRect(0, 0, w, h);
       time += 0.002;
 
-      // Debug: log every 300 frames (~5 sec) to check rotation is progressing
-      if (Math.floor(time * 500) % 300 === 0) {
-        console.log("rotation check", { time: time.toFixed(3), eyeMidRot: (time * 1.5).toFixed(3), zoom: zoom.toFixed(2), panX: panX.toFixed(1), panY: panY.toFixed(1), isDragging, mouseIsDown });
-      }
 
       // Parallax rotation speeds
       const starRot = time * 1.8;       // stars rotate (reduced 70%)
@@ -495,7 +491,7 @@ export default function Home() {
       const drawFibers = (fiberList: typeof fibers) => {
         for (const f of fiberList) {
           const totalLen = irisSpan * f.lengthMul;
-          const segments = 60;
+          const segments = 30;
           const p = f.phase;
           const slowT = time * 0.3;
 
@@ -576,25 +572,28 @@ export default function Home() {
             points.push({ x, y, t });
           }
 
-          // Draw entire fiber as one gold-to-silver gradient from iris to noise
-          // Reduce alpha in inner zone to compensate for line density stacking
+          // Draw fiber in ~5 color bands instead of per-segment
           const goldR = 180, goldG = 150, goldB = 60;
           const silverR = 155, silverG = 155, silverB = 163;
-          for (let pi = 0; pi < points.length - 1; pi++) {
-            const pt0 = points[pi];
-            const pt1 = points[pi + 1];
-            // Gold at 0, smoothly to silver by ~0.8
-            const raw = Math.min(1, pt0.t / 0.8);
-            const blend = raw * raw * (3 - 2 * raw); // smoothstep
+          const bandCount = 5;
+          const ptsPerBand = Math.ceil(points.length / bandCount);
+          for (let band = 0; band < bandCount; band++) {
+            const startIdx = band * ptsPerBand;
+            const endIdx = Math.min(points.length - 1, (band + 1) * ptsPerBand);
+            if (startIdx >= points.length - 1) break;
+            const midT = points[Math.min(startIdx + Math.floor(ptsPerBand / 2), points.length - 1)].t;
+            const raw = Math.min(1, midT / 0.8);
+            const blend = raw * raw * (3 - 2 * raw);
             const r = Math.floor(goldR + blend * (silverR - goldR));
             const g = Math.floor(goldG + blend * (silverG - goldG));
             const b = Math.floor(goldB + blend * (silverB - goldB));
-            // Fade alpha in inner zone where lines are dense and overlap
-            const densityComp = pt0.t < innerEnd ? 0.45 : (pt0.t < innerEnd + 0.05 ? 0.45 + (pt0.t - innerEnd) / 0.05 * 0.55 : 1.0);
+            const densityComp = midT < innerEnd ? 0.45 : (midT < innerEnd + 0.05 ? 0.45 + (midT - innerEnd) / 0.05 * 0.55 : 1.0);
             const alpha = f.midBright * densityComp;
             ctx.beginPath();
-            ctx.moveTo(pt0.x, pt0.y);
-            ctx.lineTo(pt1.x, pt1.y);
+            ctx.moveTo(points[startIdx].x, points[startIdx].y);
+            for (let pi = startIdx + 1; pi <= endIdx; pi++) {
+              ctx.lineTo(points[pi].x, points[pi].y);
+            }
             ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
             ctx.lineWidth = f.midWidth;
             ctx.stroke();
@@ -700,7 +699,7 @@ export default function Home() {
       ctx.fill();
 
       // Flickering energy wisps around pupil edge
-      for (let wi = 0; wi < 8; wi++) {
+      for (let wi = 0; wi < 4; wi++) {
         const wAngle = (wi / 8) * Math.PI * 2 + time * 3;
         const wR = pupilR * (1.0 + Math.sin(time * 15 + wi * 2.5) * 0.2);
         const wx = cx + Math.cos(wAngle) * wR;
