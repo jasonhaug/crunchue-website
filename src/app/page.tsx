@@ -269,11 +269,18 @@ export default function Home() {
               angularOffset = (wave * envelope) / r;
 
             } else {
-              // Outer zone: straight lines extending into noise ring
+              // Outer zone: continue mid harmonics with dampening
+              // Pick up where mid zone left off and gradually settle
               const localT = (t - midEnd) / (1 - midEnd);
-              const envelope = Math.sin(localT * Math.PI) * 0.3;
-              const wave = Math.sin(localT * f.outerWaveFreq * Math.PI + p) * f.outerWaveAmp;
-              angularOffset = (wave * envelope) / r;
+              const midLocalT = 1.0; // continuation from end of mid zone
+              const continuation = midLocalT + localT * 0.4; // slow crawl forward in the wave
+              const dampen = 1 - localT * 0.7; // gradually reduce amplitude
+              const envelope = Math.sin(continuation * Math.PI) * dampen;
+              const wave =
+                Math.sin(continuation * f.midH1 * Math.PI + p * 0.8 + slowT * 0.8) * f.midA1 +
+                Math.sin(continuation * f.midH2 * Math.PI + p * 1.4 + slowT * 0.6) * f.midA2 +
+                Math.sin(continuation * f.midH3 * Math.PI + p * 2.0 + slowT * 0.4) * f.midA3;
+              angularOffset = (wave * envelope * 0.4) / r;
             }
 
             const angle = f.angle + angularOffset;
