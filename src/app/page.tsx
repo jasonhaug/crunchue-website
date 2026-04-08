@@ -308,7 +308,7 @@ export default function Home() {
 
           // Draw outer zone
           ctx.beginPath();
-          started = false;
+          let started = false;
           for (const pt of points) {
             if (pt.t < midEnd - 0.01) continue;
             if (!started) { ctx.moveTo(pt.x, pt.y); started = true; }
