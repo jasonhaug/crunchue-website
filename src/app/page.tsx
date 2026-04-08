@@ -222,7 +222,7 @@ export default function Home() {
       ctx.restore();
       ctx.save();
       ctx.translate(cx, cy);
-      ctx.rotate(-time * 0.05);
+      ctx.rotate(time * 0.08);
       ctx.drawImage(noiseCanvas2, -noiseSize / 2, -noiseSize / 2);
       ctx.restore();
 
