@@ -252,6 +252,46 @@ export default function Home() {
     // Electrical surges — traces that follow fiber paths from center outward
     const surges: { fiberIdx: number; startTime: number; duration: number; brightness: number }[] = [];
 
+    // Lightning bolts — jagged strikes from pupil outward
+    const bolts: {
+      startTime: number;
+      duration: number;
+      angle: number;
+      segments: { x: number; y: number }[];
+      brightness: number;
+    }[] = [];
+
+    const spawnBolt = (cx2: number, cy2: number, pupilR2: number, irisOuterR2: number) => {
+      const angle = Math.random() * Math.PI * 2;
+      // Target distance: somewhere between iris inner and noise ring
+      const targetR = pupilR2 + (irisOuterR2 - pupilR2) * (0.4 + Math.random() * 0.6);
+      const segCount = 12 + Math.floor(Math.random() * 10);
+      const segs: { x: number; y: number }[] = [];
+
+      let curX = cx2 + Math.cos(angle) * pupilR2 * 0.8;
+      let curY = cy2 + Math.sin(angle) * pupilR2 * 0.8;
+      segs.push({ x: curX, y: curY });
+
+      for (let i = 1; i <= segCount; i++) {
+        const t = i / segCount;
+        const r = pupilR2 * 0.8 + t * (targetR - pupilR2 * 0.8);
+        // Jagged lateral displacement
+        const jag = (Math.random() - 0.5) * r * 0.15;
+        const perpAngle = angle + Math.PI / 2;
+        curX = cx2 + Math.cos(angle) * r + Math.cos(perpAngle) * jag;
+        curY = cy2 + Math.sin(angle) * r + Math.sin(perpAngle) * jag;
+        segs.push({ x: curX, y: curY });
+      }
+
+      bolts.push({
+        startTime: time,
+        duration: 0.015 + Math.random() * 0.01, // very fast — 3x faster than surges
+        angle,
+        segments: segs,
+        brightness: 0.7 + Math.random() * 0.3,
+      });
+    };
+
     const resize = () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
@@ -672,7 +712,40 @@ export default function Home() {
         ctx.fill();
       }
 
-      // Pupil
+      // Pupil energy aura — pulsing dark energy rings
+      const pulseA = 0.08 + Math.sin(time * 8) * 0.04;
+      const pulseB = 0.06 + Math.sin(time * 12 + 1) * 0.03;
+      const pulseC = 0.05 + Math.sin(time * 5 + 2.5) * 0.025;
+      // Outer energy halo
+      const auraR = pupilR * (1.8 + Math.sin(time * 6) * 0.15);
+      const auraGrad = ctx.createRadialGradient(cx, cy, pupilR * 0.5, cx, cy, auraR);
+      auraGrad.addColorStop(0, "rgba(0, 0, 0, 0)");
+      auraGrad.addColorStop(0.4, `rgba(20, 20, 30, ${pulseA})`);
+      auraGrad.addColorStop(0.7, `rgba(40, 40, 60, ${pulseB})`);
+      auraGrad.addColorStop(0.9, `rgba(15, 15, 25, ${pulseC})`);
+      auraGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
+      ctx.fillStyle = auraGrad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, auraR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Flickering energy wisps around pupil edge
+      for (let wi = 0; wi < 8; wi++) {
+        const wAngle = (wi / 8) * Math.PI * 2 + time * 3;
+        const wR = pupilR * (1.0 + Math.sin(time * 15 + wi * 2.5) * 0.2);
+        const wx = cx + Math.cos(wAngle) * wR;
+        const wy = cy + Math.sin(wAngle) * wR;
+        const wAlpha = Math.max(0, 0.04 + Math.sin(time * 20 + wi * 3.7) * 0.03);
+        const wGrad = ctx.createRadialGradient(wx, wy, 0, wx, wy, pupilR * 0.3);
+        wGrad.addColorStop(0, `rgba(60, 60, 80, ${wAlpha})`);
+        wGrad.addColorStop(1, "rgba(20, 20, 30, 0)");
+        ctx.fillStyle = wGrad;
+        ctx.beginPath();
+        ctx.arc(wx, wy, pupilR * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Solid pupil center
       const pupilGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, pupilR * 1.4);
       pupilGrad.addColorStop(0, "rgba(0, 0, 0, 1)");
       pupilGrad.addColorStop(0.65, "rgba(0, 0, 0, 1)");
@@ -683,7 +756,59 @@ export default function Home() {
       ctx.arc(cx, cy, pupilR * 1.4, 0, Math.PI * 2);
       ctx.fill();
 
-      // Reflection
+      // Spawn lightning bolts sporadically
+      if (Math.random() < 0.012) {
+        const boltCount = 1 + Math.floor(Math.random() * 3);
+        for (let bi = 0; bi < boltCount; bi++) {
+          spawnBolt(cx, cy, pupilR, irisOuterR);
+        }
+      }
+
+      // Draw lightning bolts
+      for (let bi = bolts.length - 1; bi >= 0; bi--) {
+        const bolt = bolts[bi];
+        const elapsed = time - bolt.startTime;
+        if (elapsed > bolt.duration) { bolts.splice(bi, 1); continue; }
+        if (elapsed < 0) continue;
+
+        const progress = elapsed / bolt.duration;
+        // Flash bright at start, fade fast
+        const flash = Math.pow(1 - progress, 3) * bolt.brightness;
+
+        // Draw the jagged bolt line
+        ctx.beginPath();
+        ctx.moveTo(bolt.segments[0].x, bolt.segments[0].y);
+        for (let si = 1; si < bolt.segments.length; si++) {
+          ctx.lineTo(bolt.segments[si].x, bolt.segments[si].y);
+        }
+        // Bright white core
+        ctx.strokeStyle = `rgba(255, 255, 255, ${Math.min(1, flash)})`;
+        ctx.lineWidth = 1.5 + flash * 2;
+        ctx.stroke();
+
+        // Outer glow
+        ctx.strokeStyle = `rgba(180, 200, 255, ${Math.min(1, flash * 0.5)})`;
+        ctx.lineWidth = 4 + flash * 6;
+        ctx.stroke();
+
+        // Bright flash at origin
+        if (progress < 0.3) {
+          const originAlpha = Math.min(1, flash * 0.6);
+          const originGrad = ctx.createRadialGradient(
+            bolt.segments[0].x, bolt.segments[0].y, 0,
+            bolt.segments[0].x, bolt.segments[0].y, pupilR * 0.5
+          );
+          originGrad.addColorStop(0, `rgba(255, 255, 255, ${originAlpha})`);
+          originGrad.addColorStop(0.5, `rgba(150, 170, 255, ${originAlpha * 0.3})`);
+          originGrad.addColorStop(1, "rgba(100, 120, 200, 0)");
+          ctx.fillStyle = originGrad;
+          ctx.beginPath();
+          ctx.arc(bolt.segments[0].x, bolt.segments[0].y, pupilR * 0.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // Subtle reflection
       const rx = cx - pupilR * 0.3;
       const ry = cy - pupilR * 0.35;
       const rGrad = ctx.createRadialGradient(rx, ry, 0, rx, ry, pupilR * 0.35);
