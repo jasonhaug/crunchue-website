@@ -197,8 +197,8 @@ export default function Home() {
       const irisOuterR = minDim * 0.3;
       const irisSpan = irisOuterR - irisInnerR;
 
-      const innerEnd = 0.3;
-      const midEnd = 0.65;
+      const innerEnd = 0.075;
+      const midEnd = 0.85;
 
       ctx.fillStyle = "#000";
       ctx.fillRect(0, 0, w, h);
@@ -291,8 +291,10 @@ export default function Home() {
             if (!started) { ctx.moveTo(pt.x, pt.y); started = true; }
             else ctx.lineTo(pt.x, pt.y);
           }
-          const innerGrey = Math.floor(160 + f.innerBright * 200);
-          ctx.strokeStyle = `rgba(${innerGrey}, ${innerGrey}, ${innerGrey + 5}, ${f.innerBright})`;
+          const innerR = Math.floor(180 + f.innerBright * 75);
+          const innerG = Math.floor(140 + f.innerBright * 50);
+          const innerB = Math.floor(40 + f.innerBright * 20);
+          ctx.strokeStyle = `rgba(${innerR}, ${innerG}, ${innerB}, ${f.innerBright * 0.5})`;
           ctx.lineWidth = f.innerWidth;
           ctx.stroke();
 
