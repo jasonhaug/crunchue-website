@@ -295,23 +295,35 @@ export default function Home() {
       panY = (mouseY - cy) * (1 - ratio) + panY * ratio;
     };
 
+    let mouseIsDown = false;
+    let hasDragged = false;
+
     const onMouseDown = (e: MouseEvent) => {
-      isDragging = true;
+      mouseIsDown = true;
+      hasDragged = false;
       dragStartX = e.clientX;
       dragStartY = e.clientY;
       panStartX = panX;
       panStartY = panY;
-      canvas.style.cursor = "grabbing";
     };
 
     const onMouseMove = (e: MouseEvent) => {
-      if (!isDragging) return;
-      panX = panStartX + (e.clientX - dragStartX);
-      panY = panStartY + (e.clientY - dragStartY);
+      if (!mouseIsDown) return;
+      const dx = e.clientX - dragStartX;
+      const dy = e.clientY - dragStartY;
+      // Require minimum 3px movement to start dragging
+      if (!hasDragged && Math.sqrt(dx * dx + dy * dy) < 3) return;
+      hasDragged = true;
+      isDragging = true;
+      canvas.style.cursor = "grabbing";
+      panX = panStartX + dx;
+      panY = panStartY + dy;
     };
 
     const onMouseUp = () => {
+      mouseIsDown = false;
       isDragging = false;
+      hasDragged = false;
       canvas.style.cursor = "grab";
     };
 
