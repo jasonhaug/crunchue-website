@@ -390,6 +390,7 @@ export default function Home() {
     canvas.style.cursor = "grab";
 
     const draw = () => {
+      try {
       const w = canvas.width;
       const h = canvas.height;
       const cx = w / 2;
@@ -799,9 +800,10 @@ export default function Home() {
           const y = cy + Math.sin(angle) * r;
 
           // Brightness fades outward and at tail
-          const distFromHead = (headT - t) / (headT - tailT);
+          const span = headT - tailT;
+          const distFromHead = span > 0.001 ? (headT - t) / span : 0;
           const fadeOut = 1 - t; // dimmer toward edge
-          const surgeAlpha = surge.brightness * fadeOut * (1 - distFromHead * 0.6) * 0.8;
+          const surgeAlpha = Math.max(0, Math.min(1, surge.brightness * fadeOut * (1 - distFromHead * 0.6) * 0.8));
 
           const glowSize = 3 + surge.brightness * 4;
           const grad = ctx.createRadialGradient(x, y, 0, x, y, glowSize);
@@ -817,6 +819,9 @@ export default function Home() {
 
       ctx.restore();
 
+      } catch (e) {
+        console.warn("draw error, continuing:", e);
+      }
       animId = requestAnimationFrame(draw);
     };
 
