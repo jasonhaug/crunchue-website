@@ -177,7 +177,7 @@ export default function Home() {
     const initStars = (w: number, h: number) => {
       stars.length = 0;
       const spread = 10; // 10x screen size in each direction
-      for (let i = 0; i < 4000; i++) {
+      for (let i = 0; i < 15000; i++) {
         stars.push({
           x: w / 2 + (Math.random() - 0.5) * w * spread,
           y: h / 2 + (Math.random() - 0.5) * h * spread,
