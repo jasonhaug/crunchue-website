@@ -409,8 +409,13 @@ export default function Home() {
       ctx.fillRect(0, 0, w, h);
       time += 0.002;
 
+      // Debug: log every 300 frames (~5 sec) to check rotation is progressing
+      if (Math.floor(time * 500) % 300 === 0) {
+        console.log("rotation check", { time: time.toFixed(3), eyeMidRot: (time * 1.5).toFixed(3), zoom: zoom.toFixed(2), panX: panX.toFixed(1), panY: panY.toFixed(1), isDragging, mouseIsDown });
+      }
+
       // Parallax rotation speeds
-      const starRot = time * 6;        // stars rotate fastest
+      const starRot = time * 1.8;       // stars rotate (reduced 70%)
       const fogRot = time * 3.5;       // clouds medium
       // Eye sub-layers: inner rotates most, outer least
       const eyeInnerRot = time * 2.5;
