@@ -102,7 +102,7 @@ export default function Home() {
         outerWaveAmp: 0.5 + Math.random() * 2,
         outerWidth: 0.2 + Math.random() * 0.5,
         outerBright: 0.06 + Math.random() * 0.16,
-        lengthMul: 0.88 + Math.random() * 0.12,
+        lengthMul: 1.4 + Math.random() * 0.3,
         phase: Math.random() * Math.PI * 2,
       });
     }
@@ -134,7 +134,7 @@ export default function Home() {
         outerWaveAmp: 0.3 + Math.random() * 1.5,
         outerWidth: 0.1 + Math.random() * 0.25,
         outerBright: 0.02 + Math.random() * 0.08,
-        lengthMul: 0.5 + Math.random() * 0.5,
+        lengthMul: 1.3 + Math.random() * 0.4,
         phase: Math.random() * Math.PI * 2,
       });
     }
@@ -198,7 +198,7 @@ export default function Home() {
       const irisSpan = irisOuterR - irisInnerR;
 
       const innerEnd = 0.075;
-      const midEnd = 1.0;
+      const midEnd = 0.6;
 
       ctx.fillStyle = "#000";
       ctx.fillRect(0, 0, w, h);
@@ -269,10 +269,9 @@ export default function Home() {
               angularOffset = (wave * envelope) / r;
 
             } else {
-              // Outer zone: gentle feathery fade
+              // Outer zone: straight lines extending into noise ring
               const localT = (t - midEnd) / (1 - midEnd);
-              const fadeOut = 1 - localT;
-              const envelope = Math.sin(localT * Math.PI) * fadeOut;
+              const envelope = Math.sin(localT * Math.PI) * 0.3;
               const wave = Math.sin(localT * f.outerWaveFreq * Math.PI + p) * f.outerWaveAmp;
               angularOffset = (wave * envelope) / r;
             }
@@ -321,7 +320,7 @@ export default function Home() {
             else ctx.lineTo(pt.x, pt.y);
           }
           const outerGrey = Math.floor(110 + f.outerBright * 250);
-          ctx.strokeStyle = `rgba(${outerGrey}, ${outerGrey}, ${outerGrey + 10}, ${f.outerBright * 0.7})`;
+          ctx.strokeStyle = `rgba(${outerGrey}, ${outerGrey}, ${outerGrey + 10}, ${f.outerBright})`;
           ctx.lineWidth = f.outerWidth;
           ctx.stroke();
         }
