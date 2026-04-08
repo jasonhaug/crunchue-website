@@ -177,8 +177,8 @@ export default function Home() {
       canvas.height = window.innerHeight;
       const texSize = Math.max(canvas.width, canvas.height);
       noiseSize = texSize;
-      noiseCanvas = buildNoiseTexture(texSize, { innerR: texSize * 0.14, outerR: texSize * 0.38, maxAlpha: 50, clumpy: false });
-      noiseCanvas2 = buildNoiseTexture(texSize, { innerR: texSize * 0.12, outerR: texSize * 0.35, maxAlpha: 38, clumpy: true });
+      noiseCanvas = buildNoiseTexture(texSize, { innerR: texSize * 0.084, outerR: texSize * 0.228, maxAlpha: 80, clumpy: false });
+      noiseCanvas2 = buildNoiseTexture(texSize, { innerR: texSize * 0.072, outerR: texSize * 0.21, maxAlpha: 60, clumpy: true });
       initStars(canvas.width, canvas.height);
       initDrift();
     };
@@ -192,9 +192,9 @@ export default function Home() {
       const cy = h / 2;
       const minDim = Math.min(w, h);
 
-      const pupilR = minDim * 0.06;
-      const irisInnerR = pupilR + minDim * 0.012;
-      const irisOuterR = minDim * 0.3;
+      const pupilR = minDim * 0.036;
+      const irisInnerR = pupilR + minDim * 0.007;
+      const irisOuterR = minDim * 0.18;
       const irisSpan = irisOuterR - irisInnerR;
 
       const innerEnd = 0.225;
