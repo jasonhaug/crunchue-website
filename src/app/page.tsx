@@ -252,45 +252,15 @@ export default function Home() {
     // Electrical surges — traces that follow fiber paths from center outward
     const surges: { fiberIdx: number; startTime: number; duration: number; brightness: number }[] = [];
 
-    // Lightning bolts — jagged strikes from pupil outward
-    const bolts: {
+    // Diffused glow spots — areas of the eye that light up briefly
+    const glows: {
+      angle: number;
+      radius: number;
+      size: number;
       startTime: number;
       duration: number;
-      angle: number;
-      segments: { x: number; y: number }[];
-      brightness: number;
+      intensity: number; // 0.2 - 0.6
     }[] = [];
-
-    const spawnBolt = (cx2: number, cy2: number, pupilR2: number, irisOuterR2: number) => {
-      const angle = Math.random() * Math.PI * 2;
-      // Target distance: somewhere between iris inner and noise ring
-      const targetR = pupilR2 + (irisOuterR2 - pupilR2) * (0.4 + Math.random() * 0.6);
-      const segCount = 12 + Math.floor(Math.random() * 10);
-      const segs: { x: number; y: number }[] = [];
-
-      let curX = cx2 + Math.cos(angle) * pupilR2 * 0.8;
-      let curY = cy2 + Math.sin(angle) * pupilR2 * 0.8;
-      segs.push({ x: curX, y: curY });
-
-      for (let i = 1; i <= segCount; i++) {
-        const t = i / segCount;
-        const r = pupilR2 * 0.8 + t * (targetR - pupilR2 * 0.8);
-        // Jagged lateral displacement
-        const jag = (Math.random() - 0.5) * r * 0.15;
-        const perpAngle = angle + Math.PI / 2;
-        curX = cx2 + Math.cos(angle) * r + Math.cos(perpAngle) * jag;
-        curY = cy2 + Math.sin(angle) * r + Math.sin(perpAngle) * jag;
-        segs.push({ x: curX, y: curY });
-      }
-
-      bolts.push({
-        startTime: time,
-        duration: 0.015 + Math.random() * 0.01, // very fast — 3x faster than surges
-        angle,
-        segments: segs,
-        brightness: 0.7 + Math.random() * 0.3,
-      });
-    };
 
     const resize = () => {
       canvas.width = window.innerWidth;
@@ -756,56 +726,47 @@ export default function Home() {
       ctx.arc(cx, cy, pupilR * 1.4, 0, Math.PI * 2);
       ctx.fill();
 
-      // Spawn lightning bolts sporadically
-      if (Math.random() < 0.012) {
-        const boltCount = 1 + Math.floor(Math.random() * 3);
-        for (let bi = 0; bi < boltCount; bi++) {
-          spawnBolt(cx, cy, pupilR, irisOuterR);
-        }
+      // Spawn diffused glow spots
+      if (Math.random() < 0.015) {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = pupilR + Math.random() * (irisOuterR * 1.3 - pupilR);
+        glows.push({
+          angle,
+          radius,
+          size: irisSpan * (0.15 + Math.random() * 0.35),
+          startTime: time,
+          duration: 0.04 + Math.random() * 0.06,
+          intensity: 0.2 + Math.random() * 0.4,
+        });
       }
 
-      // Draw lightning bolts
-      for (let bi = bolts.length - 1; bi >= 0; bi--) {
-        const bolt = bolts[bi];
-        const elapsed = time - bolt.startTime;
-        if (elapsed > bolt.duration) { bolts.splice(bi, 1); continue; }
+      // Draw diffused glows — additive light that brightens the area
+      for (let gi = glows.length - 1; gi >= 0; gi--) {
+        const g = glows[gi];
+        const elapsed = time - g.startTime;
+        if (elapsed > g.duration) { glows.splice(gi, 1); continue; }
         if (elapsed < 0) continue;
 
-        const progress = elapsed / bolt.duration;
-        // Flash bright at start, fade fast
-        const flash = Math.pow(1 - progress, 3) * bolt.brightness;
+        const progress = elapsed / g.duration;
+        // Smooth fade in and out
+        const envelope = Math.sin(progress * Math.PI);
+        const alpha = Math.min(1, g.intensity * envelope);
 
-        // Draw the jagged bolt line
+        const gx = cx + Math.cos(g.angle) * g.radius;
+        const gy = cy + Math.sin(g.angle) * g.radius;
+
+        const glowGrad = ctx.createRadialGradient(gx, gy, 0, gx, gy, g.size);
+        glowGrad.addColorStop(0, `rgba(255, 255, 255, ${alpha * 0.7})`);
+        glowGrad.addColorStop(0.3, `rgba(220, 220, 230, ${alpha * 0.4})`);
+        glowGrad.addColorStop(0.6, `rgba(180, 180, 195, ${alpha * 0.15})`);
+        glowGrad.addColorStop(1, "rgba(150, 150, 165, 0)");
+
+        ctx.globalCompositeOperation = "screen";
+        ctx.fillStyle = glowGrad;
         ctx.beginPath();
-        ctx.moveTo(bolt.segments[0].x, bolt.segments[0].y);
-        for (let si = 1; si < bolt.segments.length; si++) {
-          ctx.lineTo(bolt.segments[si].x, bolt.segments[si].y);
-        }
-        // Bright white core
-        ctx.strokeStyle = `rgba(255, 255, 255, ${Math.min(1, flash)})`;
-        ctx.lineWidth = 1.5 + flash * 2;
-        ctx.stroke();
-
-        // Outer glow
-        ctx.strokeStyle = `rgba(180, 200, 255, ${Math.min(1, flash * 0.5)})`;
-        ctx.lineWidth = 4 + flash * 6;
-        ctx.stroke();
-
-        // Bright flash at origin
-        if (progress < 0.3) {
-          const originAlpha = Math.min(1, flash * 0.6);
-          const originGrad = ctx.createRadialGradient(
-            bolt.segments[0].x, bolt.segments[0].y, 0,
-            bolt.segments[0].x, bolt.segments[0].y, pupilR * 0.5
-          );
-          originGrad.addColorStop(0, `rgba(255, 255, 255, ${originAlpha})`);
-          originGrad.addColorStop(0.5, `rgba(150, 170, 255, ${originAlpha * 0.3})`);
-          originGrad.addColorStop(1, "rgba(100, 120, 200, 0)");
-          ctx.fillStyle = originGrad;
-          ctx.beginPath();
-          ctx.arc(bolt.segments[0].x, bolt.segments[0].y, pupilR * 0.5, 0, Math.PI * 2);
-          ctx.fill();
-        }
+        ctx.arc(gx, gy, g.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalCompositeOperation = "source-over";
       }
 
       // Subtle reflection
