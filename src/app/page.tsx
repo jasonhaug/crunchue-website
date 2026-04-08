@@ -395,9 +395,9 @@ export default function Home() {
       time += 0.002;
 
       // Parallax rotation speeds
-      const starRot = time * 0.04;    // stars rotate fastest
-      const fogRot = time * 0.025;    // clouds medium
-      const eyeRot = time * 0.008;    // eye rotates slowest
+      const starRot = time * 0.6;     // stars rotate fastest
+      const fogRot = time * 0.35;     // clouds medium
+      const eyeRot = time * 0.1;      // eye rotates slowest
 
       // === LAYER 1: Stars (outermost, fastest rotation) ===
       ctx.save();
