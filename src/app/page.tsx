@@ -198,7 +198,7 @@ export default function Home() {
       const irisSpan = irisOuterR - irisInnerR;
 
       const innerEnd = 0.075;
-      const midEnd = 0.85;
+      const midEnd = 1.0;
 
       ctx.fillStyle = "#000";
       ctx.fillRect(0, 0, w, h);
