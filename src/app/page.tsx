@@ -249,6 +249,9 @@ export default function Home() {
 
     const flashes: { angle: number; radius: number; life: number; maxLife: number; brightness: number }[] = [];
 
+    // Electrical surges — traces that follow fiber paths from center outward
+    const surges: { fiberIdx: number; startTime: number; duration: number; brightness: number }[] = [];
+
     const resize = () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
@@ -397,7 +400,10 @@ export default function Home() {
       // Parallax rotation speeds
       const starRot = time * 0.6;     // stars rotate fastest
       const fogRot = time * 0.35;     // clouds medium
-      const eyeRot = time * 0.1;      // eye rotates slowest
+      // Eye sub-layers: inner rotates most, outer least
+      const eyeInnerRot = time * 0.25;
+      const eyeMidRot = time * 0.15;
+      const eyeOuterRot = time * 0.08;
 
       // === LAYER 1: Stars (outermost, fastest rotation) ===
       ctx.save();
@@ -424,7 +430,6 @@ export default function Home() {
       ctx.scale(zoom, zoom);
       ctx.rotate(fogRot);
       ctx.drawImage(fogCanvas, -noiseSize / 2, -noiseSize / 2);
-      // Second fog layer counter-rotating slightly
       ctx.rotate(-fogRot * 1.4);
       ctx.scale(1.15, 1.15);
       ctx.globalAlpha = 0.6;
@@ -432,25 +437,31 @@ export default function Home() {
       ctx.globalAlpha = 1;
       ctx.restore();
 
-      // === LAYER 3: Eye (slowest rotation) ===
+      // === LAYER 3: Eye — noise ring (outer rotation) ===
       ctx.save();
       ctx.translate(panX, panY);
       ctx.translate(cx, cy);
       ctx.scale(zoom, zoom);
-      ctx.rotate(eyeRot);
-      ctx.translate(-cx, -cy);
+      ctx.rotate(eyeOuterRot);
 
-      // Iris noise ring (rotates with eye + its own spin)
+      // Iris noise ring
       ctx.save();
-      ctx.translate(cx, cy);
       ctx.rotate(time * 0.08);
       ctx.drawImage(noiseCanvas, -noiseSize / 2, -noiseSize / 2);
       ctx.restore();
       ctx.save();
-      ctx.translate(cx, cy);
       ctx.rotate(time * 0.08);
       ctx.drawImage(noiseCanvas2, -noiseSize / 2, -noiseSize / 2);
       ctx.restore();
+      ctx.restore();
+
+      // === Eye fibers (mid rotation) ===
+      ctx.save();
+      ctx.translate(panX, panY);
+      ctx.translate(cx, cy);
+      ctx.scale(zoom, zoom);
+      ctx.rotate(eyeMidRot);
+      ctx.translate(-cx, -cy);
 
       // Draw cymatics-style fibers
       const drawFibers = (fiberList: typeof fibers) => {
@@ -585,6 +596,17 @@ export default function Home() {
         ctx.stroke();
       }
 
+      // End mid rotation for fibers
+      ctx.restore();
+
+      // === Eye inner (pupil area, fastest eye rotation) ===
+      ctx.save();
+      ctx.translate(panX, panY);
+      ctx.translate(cx, cy);
+      ctx.scale(zoom, zoom);
+      ctx.rotate(eyeInnerRot);
+      ctx.translate(-cx, -cy);
+
       // Drift particles
       for (const dp of driftParticles) {
         dp.angle += dp.speed;
@@ -654,7 +676,128 @@ export default function Home() {
       ctx.arc(rx, ry, pupilR * 0.35, 0, Math.PI * 2);
       ctx.fill();
 
-      // End zoom/pan transform
+      // End inner eye rotation
+      ctx.restore();
+
+      // === Electrical surges (drawn in mid rotation context) ===
+      ctx.save();
+      ctx.translate(panX, panY);
+      ctx.translate(cx, cy);
+      ctx.scale(zoom, zoom);
+      ctx.rotate(eyeMidRot);
+      ctx.translate(-cx, -cy);
+
+      // Spawn new surges sporadically
+      if (Math.random() < 0.008) { // ~every 2-3 seconds at 60fps
+        const surgeCount = 3 + Math.floor(Math.random() * 4); // 3-6 traces per burst
+        const burstTime = time;
+        for (let si = 0; si < surgeCount; si++) {
+          // Pick a random fiber to follow
+          const fiberIdx = Math.floor(Math.random() * fibers.length);
+          surges.push({
+            fiberIdx,
+            startTime: burstTime + si * 0.001, // slight stagger
+            duration: 0.06 + Math.random() * 0.04,
+            brightness: 0.5 + Math.random() * 0.5,
+          });
+        }
+      }
+
+      // Draw active surges
+      for (let si = surges.length - 1; si >= 0; si--) {
+        const surge = surges[si];
+        const elapsed = time - surge.startTime;
+        if (elapsed < 0) continue;
+        if (elapsed > surge.duration) { surges.splice(si, 1); continue; }
+
+        const progress = elapsed / surge.duration; // 0-1
+        const f = fibers[surge.fiberIdx];
+        const totalLen = irisSpan * f.lengthMul;
+        const p = f.phase;
+        const slowT = time * 0.3;
+
+        // The surge head position moves outward
+        const headT = progress;
+        const tailT = Math.max(0, progress - 0.35);
+
+        // Trace the fiber path and light up the surge section
+        const segments = 40;
+        for (let s = 0; s < segments; s++) {
+          const t = s / segments;
+          if (t < tailT || t > headT) continue;
+
+          const r = irisInnerR + t * totalLen;
+          // Reconstruct the fiber path displacement
+          const blendWidth = 0.12;
+          const blendStart = innerEnd - blendWidth / 2;
+          const blendEnd2 = innerEnd + blendWidth / 2;
+          let angularOffset: number;
+
+          if (t < blendStart) {
+            const localT = t / innerEnd;
+            const envelope = Math.sin(localT * Math.PI);
+            const wave =
+              Math.sin(localT * f.innerH1 * Math.PI + p + slowT) * f.innerA1 +
+              Math.sin(localT * f.innerH2 * Math.PI + p * 1.7 + slowT * 0.7) * f.innerA2 +
+              Math.sin(localT * f.innerH3 * Math.PI + p * 2.3 + slowT * 0.5) * f.innerA3;
+            angularOffset = (wave * envelope) / r;
+          } else if (t < blendEnd2) {
+            const crossT2 = (t - blendStart) / blendWidth;
+            const crossSmooth = crossT2 * crossT2 * (3 - 2 * crossT2);
+            const innerLocalT = t / innerEnd;
+            const innerEnv = Math.sin(innerLocalT * Math.PI);
+            const innerWave =
+              Math.sin(innerLocalT * f.innerH1 * Math.PI + p + slowT) * f.innerA1 +
+              Math.sin(innerLocalT * f.innerH2 * Math.PI + p * 1.7 + slowT * 0.7) * f.innerA2 +
+              Math.sin(innerLocalT * f.innerH3 * Math.PI + p * 2.3 + slowT * 0.5) * f.innerA3;
+            const midLocalT = Math.max(0, (t - innerEnd) / (midEnd - innerEnd));
+            const midEnv = Math.sin(Math.max(0.001, midLocalT) * Math.PI);
+            const midWave =
+              Math.sin(midLocalT * f.midH1 * Math.PI + p * 0.8 + slowT * 0.8) * f.midA1 +
+              Math.sin(midLocalT * f.midH2 * Math.PI + p * 1.4 + slowT * 0.6) * f.midA2 +
+              Math.sin(midLocalT * f.midH3 * Math.PI + p * 2.0 + slowT * 0.4) * f.midA3;
+            angularOffset = ((innerWave * innerEnv) * (1 - crossSmooth) + (midWave * midEnv) * crossSmooth) / r;
+          } else if (t < midEnd) {
+            const localT = (t - innerEnd) / (midEnd - innerEnd);
+            const envelope = Math.sin(localT * Math.PI);
+            const wave =
+              Math.sin(localT * f.midH1 * Math.PI + p * 0.8 + slowT * 0.8) * f.midA1 +
+              Math.sin(localT * f.midH2 * Math.PI + p * 1.4 + slowT * 0.6) * f.midA2 +
+              Math.sin(localT * f.midH3 * Math.PI + p * 2.0 + slowT * 0.4) * f.midA3;
+            angularOffset = (wave * envelope) / r;
+          } else {
+            const localT2 = (t - midEnd) / (1 - midEnd);
+            const continuation = 1.0 + localT2 * 0.4;
+            const dampen = 1 - localT2 * 0.7;
+            const envelope = Math.sin(continuation * Math.PI) * dampen;
+            const wave =
+              Math.sin(continuation * f.midH1 * Math.PI + p * 0.8 + slowT * 0.8) * f.midA1 +
+              Math.sin(continuation * f.midH2 * Math.PI + p * 1.4 + slowT * 0.6) * f.midA2 +
+              Math.sin(continuation * f.midH3 * Math.PI + p * 2.0 + slowT * 0.4) * f.midA3;
+            angularOffset = (wave * envelope * 0.4) / r;
+          }
+
+          const angle = f.angle + angularOffset;
+          const x = cx + Math.cos(angle) * r;
+          const y = cy + Math.sin(angle) * r;
+
+          // Brightness fades outward and at tail
+          const distFromHead = (headT - t) / (headT - tailT);
+          const fadeOut = 1 - t; // dimmer toward edge
+          const surgeAlpha = surge.brightness * fadeOut * (1 - distFromHead * 0.6) * 0.8;
+
+          const glowSize = 3 + surge.brightness * 4;
+          const grad = ctx.createRadialGradient(x, y, 0, x, y, glowSize);
+          grad.addColorStop(0, `rgba(255, 255, 255, ${surgeAlpha})`);
+          grad.addColorStop(0.3, `rgba(200, 210, 255, ${surgeAlpha * 0.6})`);
+          grad.addColorStop(1, "rgba(150, 170, 255, 0)");
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.arc(x, y, glowSize, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
       ctx.restore();
 
       animId = requestAnimationFrame(draw);
