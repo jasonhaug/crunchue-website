@@ -290,21 +290,25 @@ export default function Home() {
           }
 
           // Draw inner + mid as one continuous gold-to-silver gradient
-          // Gold at t=0, fully silver by t=0.3
+          // Smooth cosine fade from gold to silver over first 30%
           const goldFadeEnd = 0.3;
-          const goldR = 200, goldG = 160, goldB = 50;
+          const goldR = 180, goldG = 145, goldB = 55;
           const combPoints = points.filter(pt => pt.t <= midEnd + 0.02);
           for (let ci = 0; ci < combPoints.length - 1; ci++) {
             const pt0 = combPoints[ci];
             const pt1 = combPoints[ci + 1];
-            const goldBlend = Math.max(0, 1 - pt0.t / goldFadeEnd);
+            // Cosine ease for smooth falloff — no harsh edge
+            const rawBlend = Math.max(0, 1 - pt0.t / goldFadeEnd);
+            const goldBlend = rawBlend * rawBlend * (3 - 2 * rawBlend); // smoothstep
             const silverGrey = Math.floor(130 + f.midBright * 220);
             const r = Math.floor(silverGrey + goldBlend * (goldR - silverGrey));
             const g = Math.floor(silverGrey + goldBlend * (goldG - silverGrey));
             const b = Math.floor((silverGrey + 8) + goldBlend * (goldB - silverGrey - 8));
-            // Blend width and opacity smoothly too
-            const widthBlend = pt0.t < innerEnd ? f.innerWidth : f.innerWidth + (f.midWidth - f.innerWidth) * Math.min(1, (pt0.t - innerEnd) / 0.05);
-            const alphaBlend = f.midBright + goldBlend * (f.innerBright * 0.5 - f.midBright);
+            // Smooth width transition
+            const widthT = Math.min(1, pt0.t / 0.15);
+            const widthBlend = f.innerWidth + (f.midWidth - f.innerWidth) * widthT;
+            // Consistent opacity — no bright ring at center
+            const alphaBlend = f.midBright;
             ctx.beginPath();
             ctx.moveTo(pt0.x, pt0.y);
             ctx.lineTo(pt1.x, pt1.y);
