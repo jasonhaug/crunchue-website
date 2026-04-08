@@ -86,8 +86,8 @@ export default function Home() {
         innerA1: 8 + Math.random() * 14,
         innerA2: 4 + Math.random() * 10,
         innerA3: 2 + Math.random() * 5,
-        innerWidth: 0.6 + Math.random() * 1.2,
-        innerBright: 0.12 + Math.random() * 0.18,
+        innerWidth: 0.4 + Math.random() * 0.8,
+        innerBright: 0.06 + Math.random() * 0.1,
         // Mid: different harmonic ratios — broader, more sweeping curves
         midH1: 1.5 + Math.floor(Math.cos(familySeed * 0.8) * 2 + 2) + Math.random() * 1.5,
         midH2: 3 + Math.floor(Math.sin(familySeed * 1.7) * 2 + 3) + Math.random() * 2,
@@ -197,8 +197,8 @@ export default function Home() {
       const irisOuterR = minDim * 0.18;
       const irisSpan = irisOuterR - irisInnerR;
 
-      const innerEnd = 0.225;
-      const midEnd = 0.6;
+      const innerEnd = 0.112;
+      const midEnd = 0.81;
 
       ctx.fillStyle = "#000";
       ctx.fillRect(0, 0, w, h);
@@ -290,19 +290,21 @@ export default function Home() {
           }
 
           // Draw entire fiber as one gold-to-silver gradient from iris to noise
-          const goldR = 190, goldG = 155, goldB = 55;
-          const silverR = 160, silverG = 160, silverB = 168;
+          // Reduce alpha in inner zone to compensate for line density stacking
+          const goldR = 180, goldG = 150, goldB = 60;
+          const silverR = 155, silverG = 155, silverB = 163;
           for (let pi = 0; pi < points.length - 1; pi++) {
             const pt0 = points[pi];
             const pt1 = points[pi + 1];
-            // t goes 0 (pupil) to 1+ (noise ring)
             // Gold at 0, smoothly to silver by ~0.8
             const raw = Math.min(1, pt0.t / 0.8);
             const blend = raw * raw * (3 - 2 * raw); // smoothstep
             const r = Math.floor(goldR + blend * (silverR - goldR));
             const g = Math.floor(goldG + blend * (silverG - goldG));
             const b = Math.floor(goldB + blend * (silverB - goldB));
-            const alpha = f.midBright;
+            // Fade alpha in inner zone where lines are dense and overlap
+            const densityComp = pt0.t < innerEnd ? 0.45 : (pt0.t < innerEnd + 0.05 ? 0.45 + (pt0.t - innerEnd) / 0.05 * 0.55 : 1.0);
+            const alpha = f.midBright * densityComp;
             ctx.beginPath();
             ctx.moveTo(pt0.x, pt0.y);
             ctx.lineTo(pt1.x, pt1.y);
