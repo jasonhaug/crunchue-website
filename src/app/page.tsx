@@ -139,6 +139,39 @@ export default function Home() {
       });
     }
 
+    // Transition fibers — bridge inner spinning angles into mid squiggles
+    const transitionFibers: typeof fibers = [];
+    for (let i = 0; i < 350; i++) {
+      const baseAngle = (i / 350) * Math.PI * 2;
+      const family = Math.floor(i / 6);
+      const familySeed = family * 0.7;
+      transitionFibers.push({
+        angle: baseAngle + (Math.random() - 0.5) * 0.015,
+        innerH1: 3 + Math.floor(Math.sin(familySeed) * 2 + 3) + Math.random() * 2,
+        innerH2: 5 + Math.floor(Math.cos(familySeed * 1.3) * 3 + 4) + Math.random() * 2,
+        innerH3: 8 + Math.floor(Math.sin(familySeed * 2.1) * 3 + 4) + Math.random() * 3,
+        innerA1: 6 + Math.random() * 10,
+        innerA2: 3 + Math.random() * 7,
+        innerA3: 1.5 + Math.random() * 4,
+        innerWidth: 0.3 + Math.random() * 0.6,
+        innerBright: 0.05 + Math.random() * 0.08,
+        midH1: 1.5 + Math.floor(Math.cos(familySeed * 0.8) * 2 + 2) + Math.random() * 1.5,
+        midH2: 3 + Math.floor(Math.sin(familySeed * 1.7) * 2 + 3) + Math.random() * 2,
+        midH3: 5 + Math.floor(Math.cos(familySeed * 2.5) * 2 + 3) + Math.random() * 2,
+        midA1: 10 + Math.random() * 16,
+        midA2: 5 + Math.random() * 10,
+        midA3: 2.5 + Math.random() * 5,
+        midWidth: 0.25 + Math.random() * 0.5,
+        midBright: 0.04 + Math.random() * 0.07,
+        outerWaveFreq: 1.5 + Math.random() * 3,
+        outerWaveAmp: 0.5 + Math.random() * 2,
+        outerWidth: 0.15 + Math.random() * 0.35,
+        outerBright: 0.03 + Math.random() * 0.08,
+        lengthMul: 0.5 + Math.random() * 0.3,
+        phase: Math.random() * Math.PI * 2,
+      });
+    }
+
     // Stars
     const stars: { x: number; y: number; size: number; brightness: number; twinkleSpeed: number; phase: number }[] = [];
     const initStars = (w: number, h: number) => {
@@ -206,10 +239,12 @@ export default function Home() {
       const zoomFactor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
       zoom = Math.max(0.5, Math.min(500, zoom * zoomFactor));
 
-      // Adjust pan so zoom centers on mouse
+      // Adjust pan so zoom centers on mouse position
       const ratio = zoom / prevZoom;
-      panX = mouseX - ratio * (mouseX - panX);
-      panY = mouseY - ratio * (mouseY - panY);
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+      panX = (mouseX - cx) * (1 - ratio) + panX * ratio;
+      panY = (mouseY - cy) * (1 - ratio) + panY * ratio;
     };
 
     const onMouseDown = (e: MouseEvent) => {
@@ -269,8 +304,10 @@ export default function Home() {
           const prevZoom = zoom;
           zoom = Math.max(0.5, Math.min(500, zoom * (dist / lastTouchDist)));
           const ratio = zoom / prevZoom;
-          panX = midX - ratio * (midX - panX);
-          panY = midY - ratio * (midY - panY);
+          const cx = canvas.width / 2;
+          const cy = canvas.height / 2;
+          panX = (midX - cx) * (1 - ratio) + panX * ratio;
+          panY = (midY - cy) * (1 - ratio) + panY * ratio;
         }
         lastTouchDist = dist;
         lastTouchMidX = midX;
@@ -358,11 +395,14 @@ export default function Home() {
 
             let angularOffset: number;
 
-            if (t < innerEnd) {
-              // Inner zone: high-order harmonics — tight resonance patterns
-              // Like Chladni plate at high frequency
-              const localT = t / innerEnd; // 0-1 within zone
-              // Smoothly start from 0 displacement at pupil edge
+            // Crossfade band around inner/mid boundary
+            const blendWidth = 0.12;
+            const blendStart = innerEnd - blendWidth / 2;
+            const blendEnd = innerEnd + blendWidth / 2;
+
+            if (t < blendStart) {
+              // Pure inner zone
+              const localT = t / innerEnd;
               const envelope = Math.sin(localT * Math.PI);
               const wave =
                 Math.sin(localT * f.innerH1 * Math.PI + p + slowT) * f.innerA1 +
@@ -370,13 +410,32 @@ export default function Home() {
                 Math.sin(localT * f.innerH3 * Math.PI + p * 2.3 + slowT * 0.5) * f.innerA3;
               angularOffset = (wave * envelope) / r;
 
+            } else if (t < blendEnd) {
+              // Crossfade: inner harmonics morphing into mid harmonics
+              const crossT = (t - blendStart) / blendWidth; // 0-1 across blend
+              const crossSmooth = crossT * crossT * (3 - 2 * crossT);
+
+              const innerLocalT = t / innerEnd;
+              const innerEnv = Math.sin(innerLocalT * Math.PI);
+              const innerWave =
+                Math.sin(innerLocalT * f.innerH1 * Math.PI + p + slowT) * f.innerA1 +
+                Math.sin(innerLocalT * f.innerH2 * Math.PI + p * 1.7 + slowT * 0.7) * f.innerA2 +
+                Math.sin(innerLocalT * f.innerH3 * Math.PI + p * 2.3 + slowT * 0.5) * f.innerA3;
+
+              const midLocalT = Math.max(0, (t - innerEnd) / (midEnd - innerEnd));
+              const midEnv = Math.sin(Math.max(0.001, midLocalT) * Math.PI);
+              const midWave =
+                Math.sin(midLocalT * f.midH1 * Math.PI + p * 0.8 + slowT * 0.8) * f.midA1 +
+                Math.sin(midLocalT * f.midH2 * Math.PI + p * 1.4 + slowT * 0.6) * f.midA2 +
+                Math.sin(midLocalT * f.midH3 * Math.PI + p * 2.0 + slowT * 0.4) * f.midA3;
+
+              const blended = (innerWave * innerEnv) * (1 - crossSmooth) + (midWave * midEnv) * crossSmooth;
+              angularOffset = blended / r;
+
             } else if (t < midEnd) {
-              // Mid zone: different harmonic family — broader sweeping curves
+              // Pure mid zone
               const localT = (t - innerEnd) / (midEnd - innerEnd);
               const envelope = Math.sin(localT * Math.PI);
-              // Calculate where inner zone ended to ensure connection
-              const innerEndT = innerEnd / innerEnd;
-              const innerEndEnv = Math.sin(innerEndT * Math.PI); // = 0 at boundary
               const wave =
                 Math.sin(localT * f.midH1 * Math.PI + p * 0.8 + slowT * 0.8) * f.midA1 +
                 Math.sin(localT * f.midH2 * Math.PI + p * 1.4 + slowT * 0.6) * f.midA2 +
@@ -432,6 +491,7 @@ export default function Home() {
 
       drawFibers(fibers);
       drawFibers(fineFibers);
+      drawFibers(transitionFibers);
 
       // Very subtle fold rings (40% of previous opacity)
       const collaretteR = irisInnerR + irisSpan * innerEnd;
