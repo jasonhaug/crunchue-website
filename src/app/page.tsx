@@ -13,7 +13,6 @@ export default function Home() {
     let animId: number;
     let time = 0;
 
-    // Offscreen noise ring texture (limbal ring / outer iris)
     let noiseCanvas: HTMLCanvasElement;
     let noiseCanvas2: HTMLCanvasElement;
     let noiseSize = 0;
@@ -27,13 +26,12 @@ export default function Home() {
       const nctx = c.getContext("2d")!;
       const imageData = nctx.createImageData(size, size);
       const data = imageData.data;
-      const cx = size / 2;
-      const cy = size / 2;
+      const ctr = size / 2;
 
       for (let y = 0; y < size; y++) {
         for (let x = 0; x < size; x++) {
-          const dx = x - cx;
-          const dy = y - cy;
+          const dx = x - ctr;
+          const dy = y - ctr;
           const dist = Math.sqrt(dx * dx + dy * dy);
           const idx = (y * size + x) * 4;
 
@@ -58,45 +56,83 @@ export default function Home() {
       return c;
     };
 
-    // Iris fiber data - pre-generate for consistency
-    const fiberCount = 400;
+    // Fiber generation — each fiber has per-zone variation
+    const fiberCount = 500;
     const fibers: {
       angle: number;
-      length: number; // 0-1 normalized
-      width: number;
-      brightness: number;
-      waveFreq: number;
-      waveAmp: number;
+      // Per-zone characteristics (inner, mid, outer)
+      innerWaveFreq: number;
+      innerWaveAmp: number;
+      innerWidth: number;
+      innerBright: number;
+      midWaveFreq: number;
+      midWaveAmp: number;
+      midWidth: number;
+      midBright: number;
+      outerWaveFreq: number;
+      outerWaveAmp: number;
+      outerWidth: number;
+      outerBright: number;
+      // Individual quirks
+      lengthMul: number; // how far it reaches (0.85-1.0)
       phase: number;
+      kink: number; // sudden bend amount
+      kinkPos: number; // where the kink happens (0-1)
     }[] = [];
 
     for (let i = 0; i < fiberCount; i++) {
+      const baseAngle = (i / fiberCount) * Math.PI * 2;
+      const jitter = (Math.random() - 0.5) * 0.015;
       fibers.push({
-        angle: (i / fiberCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.02,
-        length: 0.5 + Math.random() * 0.5,
-        width: 0.3 + Math.random() * 1.2,
-        brightness: 0.15 + Math.random() * 0.55,
-        waveFreq: 2 + Math.random() * 6,
-        waveAmp: 1 + Math.random() * 4,
+        angle: baseAngle + jitter,
+        // Inner zone: tight, crinkly, thicker
+        innerWaveFreq: 8 + Math.random() * 12,
+        innerWaveAmp: 1.5 + Math.random() * 3,
+        innerWidth: 0.8 + Math.random() * 1.5,
+        innerBright: 0.3 + Math.random() * 0.4,
+        // Mid zone: smoother, more defined, moderate wave
+        midWaveFreq: 3 + Math.random() * 5,
+        midWaveAmp: 2 + Math.random() * 5,
+        midWidth: 0.5 + Math.random() * 1.0,
+        midBright: 0.2 + Math.random() * 0.35,
+        // Outer zone: fine, feathery, subtle wave
+        outerWaveFreq: 1.5 + Math.random() * 3,
+        outerWaveAmp: 0.5 + Math.random() * 2,
+        outerWidth: 0.2 + Math.random() * 0.6,
+        outerBright: 0.08 + Math.random() * 0.2,
+        lengthMul: 0.88 + Math.random() * 0.12,
         phase: Math.random() * Math.PI * 2,
+        kink: (Math.random() - 0.5) * 6,
+        kinkPos: 0.3 + Math.random() * 0.4,
       });
     }
 
-    // Secondary finer fibers
+    // Secondary ultra-fine fibers for fill
+    const fineFiberCount = 700;
     const fineFibers: typeof fibers = [];
-    for (let i = 0; i < 600; i++) {
+    for (let i = 0; i < fineFiberCount; i++) {
       fineFibers.push({
         angle: Math.random() * Math.PI * 2,
-        length: 0.3 + Math.random() * 0.7,
-        width: 0.2 + Math.random() * 0.5,
-        brightness: 0.05 + Math.random() * 0.25,
-        waveFreq: 3 + Math.random() * 10,
-        waveAmp: 0.5 + Math.random() * 2.5,
+        innerWaveFreq: 10 + Math.random() * 15,
+        innerWaveAmp: 1 + Math.random() * 2,
+        innerWidth: 0.3 + Math.random() * 0.5,
+        innerBright: 0.1 + Math.random() * 0.2,
+        midWaveFreq: 4 + Math.random() * 8,
+        midWaveAmp: 1 + Math.random() * 3,
+        midWidth: 0.2 + Math.random() * 0.4,
+        midBright: 0.08 + Math.random() * 0.15,
+        outerWaveFreq: 2 + Math.random() * 4,
+        outerWaveAmp: 0.3 + Math.random() * 1.5,
+        outerWidth: 0.15 + Math.random() * 0.3,
+        outerBright: 0.03 + Math.random() * 0.1,
+        lengthMul: 0.6 + Math.random() * 0.4,
         phase: Math.random() * Math.PI * 2,
+        kink: (Math.random() - 0.5) * 4,
+        kinkPos: 0.2 + Math.random() * 0.6,
       });
     }
 
-    // Star particles
+    // Stars
     const stars: { x: number; y: number; size: number; brightness: number; twinkleSpeed: number; phase: number }[] = [];
     const initStars = (w: number, h: number) => {
       stars.length = 0;
@@ -112,58 +148,37 @@ export default function Home() {
       }
     };
 
-    // Spiraling particles near iris
-    const spiralParticles: {
-      angle: number;
-      radius: number;
-      speed: number;
-      brightness: number;
-      size: number;
-      drift: number;
+    // Drifting particles
+    const driftParticles: {
+      angle: number; radius: number; speed: number;
+      brightness: number; size: number; drift: number;
     }[] = [];
-
-    const initSpiralParticles = () => {
-      spiralParticles.length = 0;
-      for (let i = 0; i < 300; i++) {
-        spiralParticles.push({
+    const initDrift = () => {
+      driftParticles.length = 0;
+      for (let i = 0; i < 250; i++) {
+        driftParticles.push({
           angle: Math.random() * Math.PI * 2,
           radius: 30 + Math.random() * 350,
-          speed: 0.0003 + Math.random() * 0.001,
+          speed: 0.0002 + Math.random() * 0.0008,
           brightness: Math.random(),
-          size: 0.4 + Math.random() * 1.2,
-          drift: -0.02 - Math.random() * 0.06,
+          size: 0.3 + Math.random() * 1.0,
+          drift: -0.015 - Math.random() * 0.04,
         });
       }
     };
 
-    // Sporadic flashes
-    const flashes: {
-      angle: number;
-      radius: number;
-      life: number;
-      maxLife: number;
-      brightness: number;
-    }[] = [];
+    // Flashes
+    const flashes: { angle: number; radius: number; life: number; maxLife: number; brightness: number }[] = [];
 
     const resize = () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
       const texSize = Math.max(canvas.width, canvas.height);
       noiseSize = texSize;
-      noiseCanvas = buildNoiseTexture(texSize, {
-        innerR: texSize * 0.14,
-        outerR: texSize * 0.38,
-        maxAlpha: 50,
-        clumpy: false,
-      });
-      noiseCanvas2 = buildNoiseTexture(texSize, {
-        innerR: texSize * 0.12,
-        outerR: texSize * 0.35,
-        maxAlpha: 38,
-        clumpy: true,
-      });
+      noiseCanvas = buildNoiseTexture(texSize, { innerR: texSize * 0.14, outerR: texSize * 0.38, maxAlpha: 50, clumpy: false });
+      noiseCanvas2 = buildNoiseTexture(texSize, { innerR: texSize * 0.12, outerR: texSize * 0.35, maxAlpha: 38, clumpy: true });
       initStars(canvas.width, canvas.height);
-      initSpiralParticles();
+      initDrift();
     };
     resize();
     window.addEventListener("resize", resize);
@@ -176,15 +191,19 @@ export default function Home() {
       const minDim = Math.min(w, h);
 
       const pupilR = minDim * 0.06;
-      const irisInnerR = pupilR + minDim * 0.01;
-      const irisOuterR = minDim * 0.28;
+      const irisInnerR = pupilR + minDim * 0.012;
+      const irisOuterR = minDim * 0.3;
+
+      // Zone boundaries (as fraction of iris span)
+      const innerEnd = 0.3;
+      const midEnd = 0.65;
 
       ctx.fillStyle = "#000";
       ctx.fillRect(0, 0, w, h);
 
       time += 0.002;
 
-      // Background stars
+      // Stars
       for (const s of stars) {
         const twinkle = 0.3 + 0.7 * Math.pow(Math.sin(time * s.twinkleSpeed + s.phase), 2);
         const alpha = s.brightness * twinkle;
@@ -195,7 +214,7 @@ export default function Home() {
         ctx.fill();
       }
 
-      // Noise ring layers (outer iris / limbal texture)
+      // Noise ring
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate(time * 0.08);
@@ -208,67 +227,134 @@ export default function Home() {
       ctx.drawImage(noiseCanvas2, -noiseSize / 2, -noiseSize / 2);
       ctx.restore();
 
-      // Iris fibers - radial lines from pupil to outer iris
-      const drawFiberSet = (fiberList: typeof fibers, globalAlphaMul: number) => {
-        for (const f of fiberList) {
-          const segments = 30;
-          const startR = irisInnerR;
-          const endR = irisInnerR + (irisOuterR - irisInnerR) * f.length;
+      // Draw fibers with three texture zones
+      const drawFibers = (fiberList: typeof fibers) => {
+        const irisSpan = irisOuterR - irisInnerR;
 
-          ctx.beginPath();
+        for (const f of fiberList) {
+          const totalLen = irisSpan * f.lengthMul;
+          const segments = 50;
+
+          // We draw the fiber in three separate strokes for different zone styles
+          // but we compute the full path first
+          const points: { x: number; y: number; t: number }[] = [];
+
           for (let s = 0; s <= segments; s++) {
             const t = s / segments;
-            const r = startR + t * (endR - startR);
-            const wave = Math.sin(t * f.waveFreq + f.phase + time * 0.5) * f.waveAmp * t;
-            const angle = f.angle + wave / r;
+            const r = irisInnerR + t * totalLen;
+
+            // Zone-blended wave
+            let waveFreq: number, waveAmp: number;
+            if (t < innerEnd) {
+              waveFreq = f.innerWaveFreq;
+              waveAmp = f.innerWaveAmp;
+            } else if (t < midEnd) {
+              const blend = (t - innerEnd) / (midEnd - innerEnd);
+              waveFreq = f.innerWaveFreq + (f.midWaveFreq - f.innerWaveFreq) * blend;
+              waveAmp = f.innerWaveAmp + (f.midWaveAmp - f.innerWaveAmp) * blend;
+            } else {
+              const blend = (t - midEnd) / (1 - midEnd);
+              waveFreq = f.midWaveFreq + (f.outerWaveFreq - f.midWaveFreq) * blend;
+              waveAmp = f.midWaveAmp + (f.outerWaveAmp - f.midWaveAmp) * blend;
+            }
+
+            // Add kink
+            let kinkOffset = 0;
+            if (Math.abs(t - f.kinkPos) < 0.08) {
+              const kinkBlend = 1 - Math.abs(t - f.kinkPos) / 0.08;
+              kinkOffset = f.kink * kinkBlend * kinkBlend;
+            }
+
+            const wave = Math.sin(t * waveFreq * Math.PI + f.phase + time * 0.4) * waveAmp * t;
+            const angle = f.angle + (wave + kinkOffset) / r;
             const x = cx + Math.cos(angle) * r;
             const y = cy + Math.sin(angle) * r;
-            if (s === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
+            points.push({ x, y, t });
           }
 
-          // Fibers brighter near pupil, fade toward outer
-          const alpha = f.brightness * globalAlphaMul;
-          const grey = Math.floor(140 + f.brightness * 100);
-          ctx.strokeStyle = `rgba(${grey}, ${grey}, ${grey + 8}, ${alpha})`;
-          ctx.lineWidth = f.width;
+          // Draw inner zone
+          ctx.beginPath();
+          let started = false;
+          for (const p of points) {
+            if (p.t > innerEnd + 0.05) break;
+            if (!started) { ctx.moveTo(p.x, p.y); started = true; }
+            else ctx.lineTo(p.x, p.y);
+          }
+          const innerAlpha = f.innerBright * (0.8 + 0.2 * Math.sin(time * 0.8 + f.phase));
+          const innerGrey = Math.floor(160 + f.innerBright * 80);
+          ctx.strokeStyle = `rgba(${innerGrey}, ${innerGrey}, ${innerGrey + 5}, ${innerAlpha})`;
+          ctx.lineWidth = f.innerWidth;
+          ctx.stroke();
+
+          // Draw mid zone
+          ctx.beginPath();
+          started = false;
+          for (const p of points) {
+            if (p.t < innerEnd - 0.02) continue;
+            if (p.t > midEnd + 0.05) break;
+            if (!started) { ctx.moveTo(p.x, p.y); started = true; }
+            else ctx.lineTo(p.x, p.y);
+          }
+          const midAlpha = f.midBright * (0.7 + 0.3 * Math.sin(time * 0.6 + f.phase + 1));
+          const midGrey = Math.floor(130 + f.midBright * 100);
+          ctx.strokeStyle = `rgba(${midGrey}, ${midGrey}, ${midGrey + 8}, ${midAlpha})`;
+          ctx.lineWidth = f.midWidth;
+          ctx.stroke();
+
+          // Draw outer zone — fades out toward noise ring
+          ctx.beginPath();
+          started = false;
+          for (const p of points) {
+            if (p.t < midEnd - 0.02) continue;
+            if (!started) { ctx.moveTo(p.x, p.y); started = true; }
+            else ctx.lineTo(p.x, p.y);
+          }
+          // Fade: full at midEnd, zero at end
+          const outerFade = 0.7;
+          const outerAlpha = f.outerBright * outerFade * (0.6 + 0.4 * Math.sin(time * 0.5 + f.phase + 2));
+          const outerGrey = Math.floor(110 + f.outerBright * 120);
+          ctx.strokeStyle = `rgba(${outerGrey}, ${outerGrey}, ${outerGrey + 10}, ${outerAlpha})`;
+          ctx.lineWidth = f.outerWidth;
           ctx.stroke();
         }
       };
 
-      drawFiberSet(fibers, 0.45);
-      drawFiberSet(fineFibers, 0.3);
+      drawFibers(fibers);
+      drawFibers(fineFibers);
 
-      // Radial glow rings within iris (collarette / iris folds)
-      for (let ring = 0; ring < 5; ring++) {
-        const r = irisInnerR + ((irisOuterR - irisInnerR) * (0.2 + ring * 0.15));
-        const wobble = Math.sin(time + ring * 1.5) * 1.5;
+      // Subtle collarette ring (boundary between inner and mid zone)
+      const collaretteR = irisInnerR + (irisOuterR - irisInnerR) * innerEnd;
+      ctx.beginPath();
+      ctx.arc(cx, cy, collaretteR, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(160, 160, 165, ${0.06 + Math.sin(time * 1.2) * 0.02})`;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // A couple more subtle fold rings
+      for (let ring = 0; ring < 3; ring++) {
+        const t = 0.15 + ring * 0.2;
+        const r = irisInnerR + (irisOuterR - irisInnerR) * t;
         ctx.beginPath();
-        ctx.arc(cx + wobble * 0.3, cy + wobble * 0.3, r, 0, Math.PI * 2);
-        const ringAlpha = 0.03 + Math.sin(time * 1.5 + ring) * 0.015;
-        ctx.strokeStyle = `rgba(180, 180, 185, ${ringAlpha})`;
-        ctx.lineWidth = 1 + Math.sin(ring + time) * 0.5;
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(140, 140, 148, ${0.025 + Math.sin(time * 1.5 + ring * 2) * 0.01})`;
+        ctx.lineWidth = 0.8;
         ctx.stroke();
       }
 
-      // Spiral particles drifting near iris
-      for (const p of spiralParticles) {
+      // Drifting particles
+      for (const p of driftParticles) {
         p.angle += p.speed;
         p.radius += p.drift;
-
         if (p.radius < pupilR) {
-          p.radius = irisInnerR + Math.random() * (irisOuterR - irisInnerR + 100);
+          p.radius = irisInnerR + Math.random() * (irisOuterR - irisInnerR + 80);
           p.angle = Math.random() * Math.PI * 2;
           p.brightness = Math.random();
         }
-
         const x = cx + Math.cos(p.angle) * p.radius;
         const y = cy + Math.sin(p.angle) * p.radius;
-
-        const distFade = Math.min(1, (p.radius - pupilR) / 60);
+        const distFade = Math.min(1, (p.radius - pupilR) / 50);
         const flicker = 0.5 + 0.5 * Math.sin(time * 8 + p.angle * 5);
-        const alpha = p.brightness * distFade * flicker * 0.4;
-
+        const alpha = p.brightness * distFade * flicker * 0.35;
         const grey = Math.floor(150 + p.brightness * 105);
         ctx.fillStyle = `rgba(${grey}, ${grey}, ${grey}, ${alpha})`;
         ctx.beginPath();
@@ -276,29 +362,23 @@ export default function Home() {
         ctx.fill();
       }
 
-      // Sporadic light flashes
+      // Flashes
       if (Math.random() < 0.025) {
         flashes.push({
           angle: Math.random() * Math.PI * 2,
           radius: irisInnerR + Math.random() * (irisOuterR - irisInnerR),
-          life: 0,
-          maxLife: 25 + Math.random() * 50,
+          life: 0, maxLife: 25 + Math.random() * 50,
           brightness: 0.3 + Math.random() * 0.5,
         });
       }
-
       for (let i = flashes.length - 1; i >= 0; i--) {
         const f = flashes[i];
         f.life++;
-        if (f.life > f.maxLife) {
-          flashes.splice(i, 1);
-          continue;
-        }
+        if (f.life > f.maxLife) { flashes.splice(i, 1); continue; }
         const progress = f.life / f.maxLife;
         const alpha = Math.min(1, progress * 5) * (1 - progress) * f.brightness * 0.2;
         const x = cx + Math.cos(f.angle + time * 0.1) * f.radius;
         const y = cy + Math.sin(f.angle + time * 0.1) * f.radius;
-
         const grad = ctx.createRadialGradient(x, y, 0, x, y, 10 + f.brightness * 15);
         grad.addColorStop(0, `rgba(255, 255, 255, ${alpha})`);
         grad.addColorStop(0.4, `rgba(180, 180, 190, ${alpha * 0.4})`);
@@ -309,7 +389,7 @@ export default function Home() {
         ctx.fill();
       }
 
-      // Pupil - dark center with soft edge
+      // Pupil
       const pupilGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, pupilR * 1.4);
       pupilGrad.addColorStop(0, "rgba(0, 0, 0, 1)");
       pupilGrad.addColorStop(0.65, "rgba(0, 0, 0, 1)");
@@ -320,24 +400,23 @@ export default function Home() {
       ctx.arc(cx, cy, pupilR * 1.4, 0, Math.PI * 2);
       ctx.fill();
 
-      // Subtle light reflection on pupil
-      const reflectX = cx - pupilR * 0.3;
-      const reflectY = cy - pupilR * 0.35;
-      const reflGrad = ctx.createRadialGradient(reflectX, reflectY, 0, reflectX, reflectY, pupilR * 0.35);
-      const reflAlpha = 0.06 + Math.sin(time * 1.5) * 0.02;
-      reflGrad.addColorStop(0, `rgba(255, 255, 255, ${reflAlpha})`);
-      reflGrad.addColorStop(1, "rgba(255, 255, 255, 0)");
-      ctx.fillStyle = reflGrad;
+      // Subtle light reflection
+      const rx = cx - pupilR * 0.3;
+      const ry = cy - pupilR * 0.35;
+      const rGrad = ctx.createRadialGradient(rx, ry, 0, rx, ry, pupilR * 0.35);
+      rGrad.addColorStop(0, `rgba(255, 255, 255, ${0.06 + Math.sin(time * 1.5) * 0.02})`);
+      rGrad.addColorStop(1, "rgba(255, 255, 255, 0)");
+      ctx.fillStyle = rGrad;
       ctx.beginPath();
-      ctx.arc(reflectX, reflectY, pupilR * 0.35, 0, Math.PI * 2);
+      ctx.arc(rx, ry, pupilR * 0.35, 0, Math.PI * 2);
       ctx.fill();
 
-      // Outer vignette
+      // Vignette
       const vigR = Math.max(w, h) * 0.55;
-      const vignette = ctx.createRadialGradient(cx, cy, vigR * 0.35, cx, cy, vigR * 1.1);
-      vignette.addColorStop(0, "rgba(0, 0, 0, 0)");
-      vignette.addColorStop(1, "rgba(0, 0, 0, 0.8)");
-      ctx.fillStyle = vignette;
+      const vig = ctx.createRadialGradient(cx, cy, vigR * 0.35, cx, cy, vigR * 1.1);
+      vig.addColorStop(0, "rgba(0, 0, 0, 0)");
+      vig.addColorStop(1, "rgba(0, 0, 0, 0.8)");
+      ctx.fillStyle = vig;
       ctx.fillRect(0, 0, w, h);
 
       animId = requestAnimationFrame(draw);
