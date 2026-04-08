@@ -282,38 +282,27 @@ export default function Home() {
             points.push({ x, y, t });
           }
 
-          // Draw inner zone
-          ctx.beginPath();
-          let started = false;
-          for (const pt of points) {
-            if (pt.t > innerEnd + 0.02) break;
-            if (!started) { ctx.moveTo(pt.x, pt.y); started = true; }
-            else ctx.lineTo(pt.x, pt.y);
-          }
-          const innerR = Math.floor(180 + f.innerBright * 75);
-          const innerG = Math.floor(140 + f.innerBright * 50);
-          const innerB = Math.floor(40 + f.innerBright * 20);
-          ctx.strokeStyle = `rgba(${innerR}, ${innerG}, ${innerB}, ${f.innerBright * 0.5})`;
-          ctx.lineWidth = f.innerWidth;
-          ctx.stroke();
-
-          // Draw mid zone — gold-to-silver gradient over first 4x inner zone size
-          const goldFadeEnd = innerEnd + (innerEnd * 4); // gold gradient extends 4x inner zone
-          const midPoints = points.filter(pt => pt.t >= innerEnd - 0.01 && pt.t <= midEnd + 0.02);
-          for (let mi = 0; mi < midPoints.length - 1; mi++) {
-            const pt0 = midPoints[mi];
-            const pt1 = midPoints[mi + 1];
-            // Blend from gold to silver
-            const goldBlend = Math.max(0, 1 - (pt0.t - innerEnd) / (goldFadeEnd - innerEnd));
+          // Draw inner + mid as one continuous gold-to-silver gradient
+          // Gold at t=0, fully silver by t=0.3
+          const goldFadeEnd = 0.3;
+          const goldR = 200, goldG = 160, goldB = 50;
+          const combPoints = points.filter(pt => pt.t <= midEnd + 0.02);
+          for (let ci = 0; ci < combPoints.length - 1; ci++) {
+            const pt0 = combPoints[ci];
+            const pt1 = combPoints[ci + 1];
+            const goldBlend = Math.max(0, 1 - pt0.t / goldFadeEnd);
             const silverGrey = Math.floor(130 + f.midBright * 220);
-            const r = Math.floor(silverGrey + goldBlend * (180 - silverGrey + f.midBright * 30));
-            const g = Math.floor(silverGrey + goldBlend * (140 - silverGrey + f.midBright * 10));
-            const b = Math.floor((silverGrey + 8) + goldBlend * (40 - silverGrey - 8));
+            const r = Math.floor(silverGrey + goldBlend * (goldR - silverGrey));
+            const g = Math.floor(silverGrey + goldBlend * (goldG - silverGrey));
+            const b = Math.floor((silverGrey + 8) + goldBlend * (goldB - silverGrey - 8));
+            // Blend width and opacity smoothly too
+            const widthBlend = pt0.t < innerEnd ? f.innerWidth : f.innerWidth + (f.midWidth - f.innerWidth) * Math.min(1, (pt0.t - innerEnd) / 0.05);
+            const alphaBlend = f.midBright + goldBlend * (f.innerBright * 0.5 - f.midBright);
             ctx.beginPath();
             ctx.moveTo(pt0.x, pt0.y);
             ctx.lineTo(pt1.x, pt1.y);
-            ctx.strokeStyle = `rgba(${r}, ${g}, ${Math.max(0, b)}, ${f.midBright})`;
-            ctx.lineWidth = f.midWidth;
+            ctx.strokeStyle = `rgba(${r}, ${g}, ${Math.max(0, b)}, ${alphaBlend})`;
+            ctx.lineWidth = widthBlend;
             ctx.stroke();
           }
 
