@@ -185,6 +185,113 @@ export default function Home() {
     resize();
     window.addEventListener("resize", resize);
 
+    // Zoom and pan state
+    let zoom = 1;
+    let panX = 0;
+    let panY = 0;
+    let isDragging = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let panStartX = 0;
+    let panStartY = 0;
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      // Zoom toward mouse position
+      const prevZoom = zoom;
+      const zoomFactor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+      zoom = Math.max(0.5, Math.min(500, zoom * zoomFactor));
+
+      // Adjust pan so zoom centers on mouse
+      const ratio = zoom / prevZoom;
+      panX = mouseX - ratio * (mouseX - panX);
+      panY = mouseY - ratio * (mouseY - panY);
+    };
+
+    const onMouseDown = (e: MouseEvent) => {
+      isDragging = true;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      panStartX = panX;
+      panStartY = panY;
+      canvas.style.cursor = "grabbing";
+    };
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isDragging) return;
+      panX = panStartX + (e.clientX - dragStartX);
+      panY = panStartY + (e.clientY - dragStartY);
+    };
+
+    const onMouseUp = () => {
+      isDragging = false;
+      canvas.style.cursor = "grab";
+    };
+
+    // Touch support for pinch zoom and drag
+    let lastTouchDist = 0;
+    let lastTouchMidX = 0;
+    let lastTouchMidY = 0;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        isDragging = true;
+        dragStartX = e.touches[0].clientX;
+        dragStartY = e.touches[0].clientY;
+        panStartX = panX;
+        panStartY = panY;
+      } else if (e.touches.length === 2) {
+        const dx = e.touches[1].clientX - e.touches[0].clientX;
+        const dy = e.touches[1].clientY - e.touches[0].clientY;
+        lastTouchDist = Math.sqrt(dx * dx + dy * dy);
+        lastTouchMidX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        lastTouchMidY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+      if (e.touches.length === 1 && isDragging) {
+        panX = panStartX + (e.touches[0].clientX - dragStartX);
+        panY = panStartY + (e.touches[0].clientY - dragStartY);
+      } else if (e.touches.length === 2) {
+        const dx = e.touches[1].clientX - e.touches[0].clientX;
+        const dy = e.touches[1].clientY - e.touches[0].clientY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+
+        if (lastTouchDist > 0) {
+          const prevZoom = zoom;
+          zoom = Math.max(0.5, Math.min(500, zoom * (dist / lastTouchDist)));
+          const ratio = zoom / prevZoom;
+          panX = midX - ratio * (midX - panX);
+          panY = midY - ratio * (midY - panY);
+        }
+        lastTouchDist = dist;
+        lastTouchMidX = midX;
+        lastTouchMidY = midY;
+      }
+    };
+
+    const onTouchEnd = () => {
+      isDragging = false;
+      lastTouchDist = 0;
+    };
+
+    canvas.addEventListener("wheel", onWheel, { passive: false });
+    canvas.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    canvas.addEventListener("touchstart", onTouchStart, { passive: false });
+    canvas.addEventListener("touchmove", onTouchMove, { passive: false });
+    canvas.addEventListener("touchend", onTouchEnd);
+    canvas.style.cursor = "grab";
+
     const draw = () => {
       const w = canvas.width;
       const h = canvas.height;
@@ -197,12 +304,20 @@ export default function Home() {
       const irisOuterR = minDim * 0.18;
       const irisSpan = irisOuterR - irisInnerR;
 
-      const innerEnd = 0.112;
+      const innerEnd = 0.224;
       const midEnd = 0.81;
 
+      // Clear at screen level (before transform)
       ctx.fillStyle = "#000";
       ctx.fillRect(0, 0, w, h);
       time += 0.002;
+
+      // Apply zoom and pan
+      ctx.save();
+      ctx.translate(panX, panY);
+      ctx.translate(cx, cy);
+      ctx.scale(zoom, zoom);
+      ctx.translate(-cx, -cy);
 
       // Stars
       for (const s of stars) {
@@ -405,13 +520,8 @@ export default function Home() {
       ctx.arc(rx, ry, pupilR * 0.35, 0, Math.PI * 2);
       ctx.fill();
 
-      // Vignette
-      const vigR = Math.max(w, h) * 0.55;
-      const vig = ctx.createRadialGradient(cx, cy, vigR * 0.35, cx, cy, vigR * 1.1);
-      vig.addColorStop(0, "rgba(0, 0, 0, 0)");
-      vig.addColorStop(1, "rgba(0, 0, 0, 0.8)");
-      ctx.fillStyle = vig;
-      ctx.fillRect(0, 0, w, h);
+      // End zoom/pan transform
+      ctx.restore();
 
       animId = requestAnimationFrame(draw);
     };
@@ -421,6 +531,13 @@ export default function Home() {
     return () => {
       cancelAnimationFrame(animId);
       window.removeEventListener("resize", resize);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+      canvas.removeEventListener("wheel", onWheel);
+      canvas.removeEventListener("mousedown", onMouseDown);
+      canvas.removeEventListener("touchstart", onTouchStart);
+      canvas.removeEventListener("touchmove", onTouchMove);
+      canvas.removeEventListener("touchend", onTouchEnd);
     };
   }, []);
 
