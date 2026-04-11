@@ -172,6 +172,14 @@ export default function Home() {
       });
     }
 
+    // Split fiber arrays into two depth layers (done once, not per frame)
+    const fibersBottom = fibers.slice(0, Math.floor(fibers.length / 2));
+    const fibersTop = fibers.slice(Math.floor(fibers.length / 2));
+    const fineFibersBottom = fineFibers.slice(0, Math.floor(fineFibers.length / 2));
+    const fineFibersTop = fineFibers.slice(Math.floor(fineFibers.length / 2));
+    const transitionFibersBottom = transitionFibers.slice(0, Math.floor(transitionFibers.length / 2));
+    const transitionFibersTop = transitionFibers.slice(Math.floor(transitionFibers.length / 2));
+
     // Stars — spread across a huge area so zooming out reveals more
     const stars: { x: number; y: number; size: number; brightness: number; twinkleSpeed: number; phase: number }[] = [];
     const initStars = (w: number, h: number) => {
@@ -427,6 +435,7 @@ export default function Home() {
       // Eye sub-layers: inner rotates most, outer least
       const eyeInnerRot = time * 1.25;
       const eyeMidRot = time * 0.75;
+      const eyeMidRotBottom = time * 0.6;  // bottom fiber layer, slightly slower
       const eyeOuterRot = time * 0.4;
 
       // === LAYER 1: Stars (outermost, fastest rotation) ===
@@ -485,12 +494,12 @@ export default function Home() {
       ctx.restore();
       ctx.restore();
 
-      // === Eye fibers (mid rotation) ===
+      // === Eye fibers — bottom layer (slower rotation, beneath) ===
       ctx.save();
       ctx.translate(panX, panY);
       ctx.translate(cx, cy);
       ctx.scale(zoom, zoom);
-      ctx.rotate(eyeMidRot);
+      ctx.rotate(eyeMidRotBottom);
       ctx.translate(-cx, -cy);
 
       // Draw cymatics-style fibers
@@ -607,9 +616,23 @@ export default function Home() {
         }
       };
 
-      drawFibers(fibers);
-      drawFibers(fineFibers);
-      drawFibers(transitionFibers);
+      drawFibers(fibersBottom);
+      drawFibers(fineFibersBottom);
+      drawFibers(transitionFibersBottom);
+
+      ctx.restore();
+
+      // === Eye fibers — top layer (slightly faster rotation, on top) ===
+      ctx.save();
+      ctx.translate(panX, panY);
+      ctx.translate(cx, cy);
+      ctx.scale(zoom, zoom);
+      ctx.rotate(eyeMidRot);
+      ctx.translate(-cx, -cy);
+
+      drawFibers(fibersTop);
+      drawFibers(fineFibersTop);
+      drawFibers(transitionFibersTop);
 
       // Very subtle fold rings (40% of previous opacity)
       const collaretteR = irisInnerR + irisSpan * innerEnd;
@@ -629,7 +652,7 @@ export default function Home() {
         ctx.stroke();
       }
 
-      // End mid rotation for fibers
+      // End top fiber layer
       ctx.restore();
 
       // === Eye inner (pupil area, fastest eye rotation) ===
