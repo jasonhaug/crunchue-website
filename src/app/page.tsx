@@ -422,12 +422,12 @@ export default function Home() {
 
 
       // Parallax rotation speeds
-      const starRot = time * 1.8;       // stars rotate (reduced 70%)
-      const fogRot = time * 3.5;       // clouds medium
+      const starRot = time * 0.9;       // stars rotate
+      const fogRot = time * 1.75;       // clouds medium
       // Eye sub-layers: inner rotates most, outer least
-      const eyeInnerRot = time * 2.5;
-      const eyeMidRot = time * 1.5;
-      const eyeOuterRot = time * 0.8;
+      const eyeInnerRot = time * 1.25;
+      const eyeMidRot = time * 0.75;
+      const eyeOuterRot = time * 0.4;
 
       // === LAYER 1: Stars (outermost, fastest rotation) ===
       ctx.save();
@@ -470,11 +470,11 @@ export default function Home() {
 
       // Iris noise ring
       ctx.save();
-      ctx.rotate(time * 0.08);
+      ctx.rotate(time * 0.04);
       ctx.drawImage(noiseCanvas, -noiseSize / 2, -noiseSize / 2);
       ctx.restore();
       ctx.save();
-      ctx.rotate(time * 0.08);
+      ctx.rotate(time * 0.04);
       ctx.drawImage(noiseCanvas2, -noiseSize / 2, -noiseSize / 2);
       ctx.restore();
       ctx.restore();
@@ -791,8 +791,8 @@ export default function Home() {
       ctx.translate(-cx, -cy);
 
       // Spawn new surges sporadically
-      if (Math.random() < 0.008) { // ~every 2-3 seconds at 60fps
-        const surgeCount = 3 + Math.floor(Math.random() * 4); // 3-6 traces per burst
+      if (Math.random() < 0.003) { // ~every 5-6 seconds at 60fps
+        const surgeCount = 1 + Math.floor(Math.random() * 3); // 1-3 traces per burst
         const burstTime = time;
         for (let si = 0; si < surgeCount; si++) {
           // Pick a random fiber to follow
