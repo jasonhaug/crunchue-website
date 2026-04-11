@@ -761,14 +761,14 @@ export default function Home() {
         glows.push({
           angle,
           radius,
-          size: irisSpan * (0.15 + Math.random() * 0.35),
+          size: irisSpan * (0.25 + Math.random() * 0.5),
           startTime: time,
-          duration: 0.04 + Math.random() * 0.06,
-          intensity: 0.2 + Math.random() * 0.4,
+          duration: 0.05 + Math.random() * 0.08,
+          intensity: 0.1 + Math.random() * 0.12,
         });
       }
 
-      // Draw diffused glows — additive light that brightens the area
+      // Draw diffused glows — color-dodge only brightens existing content (fibers)
       for (let gi = glows.length - 1; gi >= 0; gi--) {
         const g = glows[gi];
         const elapsed = time - g.startTime;
@@ -776,20 +776,23 @@ export default function Home() {
         if (elapsed < 0) continue;
 
         const progress = elapsed / g.duration;
-        // Smooth fade in and out
         const envelope = Math.sin(progress * Math.PI);
-        const alpha = Math.min(1, g.intensity * envelope);
+        const alpha = g.intensity * envelope;
 
         const gx = cx + Math.cos(g.angle) * g.radius;
         const gy = cy + Math.sin(g.angle) * g.radius;
 
+        // Ultra-soft gradient — 100% feathered, nearly linear falloff
         const glowGrad = ctx.createRadialGradient(gx, gy, 0, gx, gy, g.size);
-        glowGrad.addColorStop(0, `rgba(255, 255, 255, ${alpha * 0.7})`);
-        glowGrad.addColorStop(0.3, `rgba(220, 220, 230, ${alpha * 0.4})`);
-        glowGrad.addColorStop(0.6, `rgba(180, 180, 195, ${alpha * 0.15})`);
-        glowGrad.addColorStop(1, "rgba(150, 150, 165, 0)");
+        glowGrad.addColorStop(0, `rgba(255, 255, 255, ${alpha * 0.06})`);
+        glowGrad.addColorStop(0.15, `rgba(255, 255, 255, ${alpha * 0.05})`);
+        glowGrad.addColorStop(0.35, `rgba(255, 255, 255, ${alpha * 0.035})`);
+        glowGrad.addColorStop(0.55, `rgba(255, 255, 255, ${alpha * 0.02})`);
+        glowGrad.addColorStop(0.75, `rgba(255, 255, 255, ${alpha * 0.008})`);
+        glowGrad.addColorStop(0.9, `rgba(255, 255, 255, ${alpha * 0.002})`);
+        glowGrad.addColorStop(1, "rgba(255, 255, 255, 0)");
 
-        ctx.globalCompositeOperation = "screen";
+        ctx.globalCompositeOperation = "color-dodge";
         ctx.fillStyle = glowGrad;
         ctx.beginPath();
         ctx.arc(gx, gy, g.size, 0, Math.PI * 2);
