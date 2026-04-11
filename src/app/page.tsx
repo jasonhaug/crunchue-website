@@ -172,14 +172,6 @@ export default function Home() {
       });
     }
 
-    // Split fiber arrays into two depth layers (done once, not per frame)
-    const fibersBottom = fibers.slice(0, Math.floor(fibers.length / 2));
-    const fibersTop = fibers.slice(Math.floor(fibers.length / 2));
-    const fineFibersBottom = fineFibers.slice(0, Math.floor(fineFibers.length / 2));
-    const fineFibersTop = fineFibers.slice(Math.floor(fineFibers.length / 2));
-    const transitionFibersBottom = transitionFibers.slice(0, Math.floor(transitionFibers.length / 2));
-    const transitionFibersTop = transitionFibers.slice(Math.floor(transitionFibers.length / 2));
-
     // Stars — spread across a huge area so zooming out reveals more
     const stars: { x: number; y: number; size: number; brightness: number; twinkleSpeed: number; phase: number }[] = [];
     const initStars = (w: number, h: number) => {
@@ -259,6 +251,9 @@ export default function Home() {
 
     // Electrical surges — traces that follow fiber paths from center outward
     const surges: { fiberIdx: number; startTime: number; chargeDuration: number; travelDuration: number; brightness: number }[] = [];
+
+    // Noise impact pulses — localized brightening when surges hit the outer ring
+    const noisePulses: { angle: number; startTime: number; duration: number }[] = [];
 
     // Diffused glow spots — areas of the eye that light up briefly
     const glows: {
@@ -435,7 +430,6 @@ export default function Home() {
       // Eye sub-layers: inner rotates most, outer least
       const eyeInnerRot = time * 1.25;
       const eyeMidRot = time * 0.75;
-      const eyeMidRotBottom = time * 0.6;  // bottom fiber layer, slightly slower
       const eyeOuterRot = time * 0.4;
 
       // === LAYER 1: Stars (outermost, fastest rotation) ===
@@ -477,29 +471,49 @@ export default function Home() {
       ctx.scale(zoom, zoom);
       ctx.rotate(eyeOuterRot);
 
-      // Noise opacity pulse — randomized sine wave (~3s cycle)
-      const noisePulseBase = Math.sin(time * 15) * 0.7 + Math.sin(time * 23.7 + 1.3) * 0.2 + Math.sin(time * 8.2 + 2.7) * 0.1;
-      const noisePulse = 0.3 + 0.7 * (noisePulseBase * 0.5 + 0.5);
+      // Noise base: mostly static + subtle 5% sine wave boost
+      const noiseAlpha = 0.95 + 0.05 * (0.5 + 0.5 * Math.sin(time * 15));
 
       // Iris noise ring
       ctx.save();
-      ctx.globalAlpha = noisePulse;
+      ctx.globalAlpha = noiseAlpha;
       ctx.rotate(time * 0.04);
       ctx.drawImage(noiseCanvas, -noiseSize / 2, -noiseSize / 2);
       ctx.restore();
       ctx.save();
-      ctx.globalAlpha = noisePulse;
+      ctx.globalAlpha = noiseAlpha;
       ctx.rotate(time * 0.04);
       ctx.drawImage(noiseCanvas2, -noiseSize / 2, -noiseSize / 2);
       ctx.restore();
+
+      // Localized noise pulses from surge impacts (~1/3 of ring, +5% brightness)
+      for (let pi = noisePulses.length - 1; pi >= 0; pi--) {
+        const np = noisePulses[pi];
+        const npElapsed = time - np.startTime;
+        if (npElapsed > np.duration) { noisePulses.splice(pi, 1); continue; }
+        const npFade = Math.sin((npElapsed / np.duration) * Math.PI);
+
+        ctx.save();
+        ctx.rotate(time * 0.04);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, noiseSize, np.angle - Math.PI / 3, np.angle + Math.PI / 3);
+        ctx.closePath();
+        ctx.clip();
+        ctx.globalAlpha = 0.05 * npFade;
+        ctx.drawImage(noiseCanvas, -noiseSize / 2, -noiseSize / 2);
+        ctx.drawImage(noiseCanvas2, -noiseSize / 2, -noiseSize / 2);
+        ctx.restore();
+      }
+
       ctx.restore();
 
-      // === Eye fibers — bottom layer (slower rotation, beneath) ===
+      // === Eye fibers (mid rotation) ===
       ctx.save();
       ctx.translate(panX, panY);
       ctx.translate(cx, cy);
       ctx.scale(zoom, zoom);
-      ctx.rotate(eyeMidRotBottom);
+      ctx.rotate(eyeMidRot);
       ctx.translate(-cx, -cy);
 
       // Draw cymatics-style fibers
@@ -616,23 +630,9 @@ export default function Home() {
         }
       };
 
-      drawFibers(fibersBottom);
-      drawFibers(fineFibersBottom);
-      drawFibers(transitionFibersBottom);
-
-      ctx.restore();
-
-      // === Eye fibers — top layer (slightly faster rotation, on top) ===
-      ctx.save();
-      ctx.translate(panX, panY);
-      ctx.translate(cx, cy);
-      ctx.scale(zoom, zoom);
-      ctx.rotate(eyeMidRot);
-      ctx.translate(-cx, -cy);
-
-      drawFibers(fibersTop);
-      drawFibers(fineFibersTop);
-      drawFibers(transitionFibersTop);
+      drawFibers(fibers);
+      drawFibers(fineFibers);
+      drawFibers(transitionFibers);
 
       // Very subtle fold rings (40% of previous opacity)
       const collaretteR = irisInnerR + irisSpan * innerEnd;
@@ -652,7 +652,7 @@ export default function Home() {
         ctx.stroke();
       }
 
-      // End top fiber layer
+      // End mid rotation for fibers
       ctx.restore();
 
       // === Eye inner (pupil area, fastest eye rotation) ===
@@ -819,16 +819,28 @@ export default function Home() {
       ctx.rotate(eyeMidRot);
       ctx.translate(-cx, -cy);
 
-      // Spawn new surges sporadically
-      if (Math.random() < 0.003) { // ~every 5-6 seconds at 60fps
-        const surgeCount = 1 + Math.floor(Math.random() * 3); // 1-3 traces per burst
-        const burstTime = time;
-        for (let si = 0; si < surgeCount; si++) {
-          // Pick a random fiber to follow
-          const fiberIdx = Math.floor(Math.random() * fibers.length);
+      // Spawn surge pairs — two orbs roughly 180 degrees apart (±10 degrees)
+      if (Math.random() < 0.003) {
+        const baseAngle = Math.random() * Math.PI * 2;
+        const jitter1 = (Math.random() - 0.5) * (20 * Math.PI / 180);
+        const jitter2 = (Math.random() - 0.5) * (20 * Math.PI / 180);
+        const angles = [baseAngle + jitter1, baseAngle + Math.PI + jitter2];
+
+        const findClosestFiber = (target: number) => {
+          let bestIdx = 0;
+          let bestDiff = Infinity;
+          for (let i = 0; i < fibers.length; i++) {
+            let diff = Math.abs(fibers[i].angle - target);
+            while (diff > Math.PI) diff = Math.abs(diff - Math.PI * 2);
+            if (diff < bestDiff) { bestDiff = diff; bestIdx = i; }
+          }
+          return bestIdx;
+        };
+
+        for (const a of angles) {
           surges.push({
-            fiberIdx,
-            startTime: burstTime + si * 0.002,
+            fiberIdx: findClosestFiber(a),
+            startTime: time,
             chargeDuration: 0.03 + Math.random() * 0.02,
             travelDuration: 0.08 + Math.random() * 0.05,
             brightness: 0.5 + Math.random() * 0.5,
@@ -836,13 +848,24 @@ export default function Home() {
         }
       }
 
-      // Draw active surges — charge in noise, shoot inward to the black hole
+      // Draw active surges — charge at center, shoot outward, dissolve at noise ring
       for (let si = surges.length - 1; si >= 0; si--) {
         const surge = surges[si];
         const elapsed = time - surge.startTime;
         if (elapsed < 0) continue;
         const totalDuration = surge.chargeDuration + surge.travelDuration;
-        if (elapsed > totalDuration) { surges.splice(si, 1); continue; }
+        if (elapsed > totalDuration) {
+          // Trigger localized noise pulse at impact angle
+          const f = fibers[surge.fiberIdx];
+          const noiseFullRot = eyeOuterRot + time * 0.04;
+          noisePulses.push({
+            angle: f.angle + eyeMidRot - noiseFullRot,
+            startTime: time,
+            duration: 0.06,
+          });
+          surges.splice(si, 1);
+          continue;
+        }
 
         const f = fibers[surge.fiberIdx];
         const totalLen = irisSpan * f.lengthMul;
@@ -905,66 +928,67 @@ export default function Home() {
           return { x: cx + Math.cos(angle) * r, y: cy + Math.sin(angle) * r };
         };
 
-        // Outer origin — charge glow appears in the noise
-        const outerOrigin = fiberPos(0.9);
+        // Inner origin — charge glow near the pupil
+        const innerOrigin = fiberPos(0.0);
 
         if (elapsed < surge.chargeDuration) {
-          // === CHARGE PHASE: glow builds in the noise (outer end) ===
+          // === CHARGE PHASE: glow builds at the center ===
           const chargeProgress = elapsed / surge.chargeDuration;
           const chargeIntensity = chargeProgress * chargeProgress;
           const glowSize = 5 + chargeIntensity * 14;
           const alpha = surge.brightness * chargeIntensity * 0.9;
 
-          const grad = ctx.createRadialGradient(outerOrigin.x, outerOrigin.y, 0, outerOrigin.x, outerOrigin.y, glowSize);
+          const grad = ctx.createRadialGradient(innerOrigin.x, innerOrigin.y, 0, innerOrigin.x, innerOrigin.y, glowSize);
           grad.addColorStop(0, `rgba(255, 255, 255, ${alpha})`);
           grad.addColorStop(0.3, `rgba(200, 210, 255, ${alpha * 0.7})`);
           grad.addColorStop(0.6, `rgba(150, 170, 255, ${alpha * 0.3})`);
           grad.addColorStop(1, "rgba(100, 130, 255, 0)");
           ctx.fillStyle = grad;
           ctx.beginPath();
-          ctx.arc(outerOrigin.x, outerOrigin.y, glowSize, 0, Math.PI * 2);
+          ctx.arc(innerOrigin.x, innerOrigin.y, glowSize, 0, Math.PI * 2);
           ctx.fill();
         } else {
-          // === TRAVEL PHASE: bolt shoots inward toward the black hole ===
+          // === TRAVEL PHASE: bolt shoots outward, dissolves near outer ring ===
           const travelElapsed = elapsed - surge.chargeDuration;
           const travelProgress = travelElapsed / surge.travelDuration;
 
-          // Cubic ease-out: fast launch inward, decelerates near center
+          // Cubic ease-out: fast launch outward, decelerates near edge
           const eased = 1 - Math.pow(1 - travelProgress, 3);
-          // Head sweeps inward: starts at 0.9 (noise), moves toward 0 (pupil)
-          const headT = 0.9 * (1 - eased);
+          const headT = eased * 0.95;
           const tailSpread = 0.25 + 0.1 * (1 - travelProgress);
-          const tailT = Math.min(0.9, headT + tailSpread);
+          const tailT = Math.max(0, headT - tailSpread);
 
-          // Fading charge glow at outer origin
+          // Dissolve as the bolt approaches the outer ring
+          const dissolveFade = headT > 0.7 ? Math.max(0, 1 - (headT - 0.7) / 0.25) : 1;
+
+          // Fading charge glow at inner origin
           const originFade = Math.max(0, 1 - travelProgress * 3);
           if (originFade > 0) {
             const glowSize = 10 + surge.brightness * 4;
             const alpha = surge.brightness * originFade * 0.7;
-            const grad = ctx.createRadialGradient(outerOrigin.x, outerOrigin.y, 0, outerOrigin.x, outerOrigin.y, glowSize);
+            const grad = ctx.createRadialGradient(innerOrigin.x, innerOrigin.y, 0, innerOrigin.x, innerOrigin.y, glowSize);
             grad.addColorStop(0, `rgba(255, 255, 255, ${alpha})`);
             grad.addColorStop(0.4, `rgba(200, 210, 255, ${alpha * 0.5})`);
             grad.addColorStop(1, "rgba(150, 170, 255, 0)");
             ctx.fillStyle = grad;
             ctx.beginPath();
-            ctx.arc(outerOrigin.x, outerOrigin.y, glowSize, 0, Math.PI * 2);
+            ctx.arc(innerOrigin.x, innerOrigin.y, glowSize, 0, Math.PI * 2);
             ctx.fill();
           }
 
-          // Draw the bolt along the fiber path (inward)
+          // Draw the bolt along the fiber path (outward, dissolving)
           const segments = 40;
           for (let s = 0; s <= segments; s++) {
             const t = s / segments;
-            if (t < headT || t > tailT) continue;
+            if (t < tailT || t > headT) continue;
 
             const pt = fiberPos(t);
 
-            // Brightness peaks at head (inner end), fades toward tail (outer)
-            const span = tailT - headT;
-            const posInBolt = span > 0.001 ? (tailT - t) / span : 0;
+            // Brightness peaks at head, fades toward tail, dissolves near edge
+            const span = headT - tailT;
+            const posInBolt = span > 0.001 ? (t - tailT) / span : 0;
             const headGlow = Math.pow(posInBolt, 1.5);
-            const edgeFade = 1 - eased * 0.3;
-            const surgeAlpha = Math.max(0, Math.min(1, surge.brightness * headGlow * edgeFade * 0.9));
+            const surgeAlpha = Math.max(0, Math.min(1, surge.brightness * headGlow * dissolveFade * 0.9));
 
             const glowSize = 3 + surge.brightness * 5 * headGlow;
             const grad = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, glowSize);
