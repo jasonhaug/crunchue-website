@@ -468,12 +468,18 @@ export default function Home() {
       ctx.scale(zoom, zoom);
       ctx.rotate(eyeOuterRot);
 
+      // Noise opacity pulse — randomized sine wave (~3s cycle)
+      const noisePulseBase = Math.sin(time * 15) * 0.7 + Math.sin(time * 23.7 + 1.3) * 0.2 + Math.sin(time * 8.2 + 2.7) * 0.1;
+      const noisePulse = 0.3 + 0.7 * (noisePulseBase * 0.5 + 0.5);
+
       // Iris noise ring
       ctx.save();
+      ctx.globalAlpha = noisePulse;
       ctx.rotate(time * 0.04);
       ctx.drawImage(noiseCanvas, -noiseSize / 2, -noiseSize / 2);
       ctx.restore();
       ctx.save();
+      ctx.globalAlpha = noisePulse;
       ctx.rotate(time * 0.04);
       ctx.drawImage(noiseCanvas2, -noiseSize / 2, -noiseSize / 2);
       ctx.restore();
@@ -807,7 +813,7 @@ export default function Home() {
         }
       }
 
-      // Draw active surges — charge at center, then shoot outward decelerating
+      // Draw active surges — charge in noise, shoot inward to the black hole
       for (let si = surges.length - 1; si >= 0; si--) {
         const surge = surges[si];
         const elapsed = time - surge.startTime;
@@ -820,127 +826,131 @@ export default function Home() {
         const p = f.phase;
         const slowT = time * 0.3;
 
-        // Origin point — where the fiber starts, near the pupil edge
-        const originX = cx + Math.cos(f.angle) * irisInnerR;
-        const originY = cy + Math.sin(f.angle) * irisInnerR;
+        // Compute position on fiber at parameter t (0=inner, 1=outer)
+        const fiberPos = (t: number) => {
+          const r = irisInnerR + t * totalLen;
+          const blendWidth = 0.12;
+          const blendStart = innerEnd - blendWidth / 2;
+          const blendEnd2 = innerEnd + blendWidth / 2;
+          let angularOffset: number;
+
+          if (t < blendStart) {
+            const localT = t / innerEnd;
+            const envelope = Math.sin(localT * Math.PI);
+            const wave =
+              Math.sin(localT * f.innerH1 * Math.PI + p + slowT) * f.innerA1 +
+              Math.sin(localT * f.innerH2 * Math.PI + p * 1.7 + slowT * 0.7) * f.innerA2 +
+              Math.sin(localT * f.innerH3 * Math.PI + p * 2.3 + slowT * 0.5) * f.innerA3;
+            angularOffset = (wave * envelope) / r;
+          } else if (t < blendEnd2) {
+            const crossT2 = (t - blendStart) / blendWidth;
+            const crossSmooth = crossT2 * crossT2 * (3 - 2 * crossT2);
+            const innerLocalT = t / innerEnd;
+            const innerEnv = Math.sin(innerLocalT * Math.PI);
+            const innerWave =
+              Math.sin(innerLocalT * f.innerH1 * Math.PI + p + slowT) * f.innerA1 +
+              Math.sin(innerLocalT * f.innerH2 * Math.PI + p * 1.7 + slowT * 0.7) * f.innerA2 +
+              Math.sin(innerLocalT * f.innerH3 * Math.PI + p * 2.3 + slowT * 0.5) * f.innerA3;
+            const midLocalT = Math.max(0, (t - innerEnd) / (midEnd - innerEnd));
+            const midEnv = Math.sin(Math.max(0.001, midLocalT) * Math.PI);
+            const midWave =
+              Math.sin(midLocalT * f.midH1 * Math.PI + p * 0.8 + slowT * 0.8) * f.midA1 +
+              Math.sin(midLocalT * f.midH2 * Math.PI + p * 1.4 + slowT * 0.6) * f.midA2 +
+              Math.sin(midLocalT * f.midH3 * Math.PI + p * 2.0 + slowT * 0.4) * f.midA3;
+            angularOffset = ((innerWave * innerEnv) * (1 - crossSmooth) + (midWave * midEnv) * crossSmooth) / r;
+          } else if (t < midEnd) {
+            const localT = (t - innerEnd) / (midEnd - innerEnd);
+            const envelope = Math.sin(localT * Math.PI);
+            const wave =
+              Math.sin(localT * f.midH1 * Math.PI + p * 0.8 + slowT * 0.8) * f.midA1 +
+              Math.sin(localT * f.midH2 * Math.PI + p * 1.4 + slowT * 0.6) * f.midA2 +
+              Math.sin(localT * f.midH3 * Math.PI + p * 2.0 + slowT * 0.4) * f.midA3;
+            angularOffset = (wave * envelope) / r;
+          } else {
+            const localT2 = (t - midEnd) / (1 - midEnd);
+            const continuation = 1.0 + localT2 * 0.4;
+            const dampen = 1 - localT2 * 0.7;
+            const envelope = Math.sin(continuation * Math.PI) * dampen;
+            const wave =
+              Math.sin(continuation * f.midH1 * Math.PI + p * 0.8 + slowT * 0.8) * f.midA1 +
+              Math.sin(continuation * f.midH2 * Math.PI + p * 1.4 + slowT * 0.6) * f.midA2 +
+              Math.sin(continuation * f.midH3 * Math.PI + p * 2.0 + slowT * 0.4) * f.midA3;
+            angularOffset = (wave * envelope * 0.4) / r;
+          }
+
+          const angle = f.angle + angularOffset;
+          return { x: cx + Math.cos(angle) * r, y: cy + Math.sin(angle) * r };
+        };
+
+        // Outer origin — charge glow appears in the noise
+        const outerOrigin = fiberPos(0.9);
 
         if (elapsed < surge.chargeDuration) {
-          // === CHARGE PHASE: glow builds at origin ===
+          // === CHARGE PHASE: glow builds in the noise (outer end) ===
           const chargeProgress = elapsed / surge.chargeDuration;
-          const chargeIntensity = chargeProgress * chargeProgress; // ease-in: slow then bright
+          const chargeIntensity = chargeProgress * chargeProgress;
           const glowSize = 5 + chargeIntensity * 14;
           const alpha = surge.brightness * chargeIntensity * 0.9;
 
-          const grad = ctx.createRadialGradient(originX, originY, 0, originX, originY, glowSize);
+          const grad = ctx.createRadialGradient(outerOrigin.x, outerOrigin.y, 0, outerOrigin.x, outerOrigin.y, glowSize);
           grad.addColorStop(0, `rgba(255, 255, 255, ${alpha})`);
           grad.addColorStop(0.3, `rgba(200, 210, 255, ${alpha * 0.7})`);
           grad.addColorStop(0.6, `rgba(150, 170, 255, ${alpha * 0.3})`);
           grad.addColorStop(1, "rgba(100, 130, 255, 0)");
           ctx.fillStyle = grad;
           ctx.beginPath();
-          ctx.arc(originX, originY, glowSize, 0, Math.PI * 2);
+          ctx.arc(outerOrigin.x, outerOrigin.y, glowSize, 0, Math.PI * 2);
           ctx.fill();
         } else {
-          // === TRAVEL PHASE: bolt launches fast, decelerates ===
+          // === TRAVEL PHASE: bolt shoots inward toward the black hole ===
           const travelElapsed = elapsed - surge.chargeDuration;
           const travelProgress = travelElapsed / surge.travelDuration;
 
-          // Cubic ease-out: fast launch, slow arrival
+          // Cubic ease-out: fast launch inward, decelerates near center
           const eased = 1 - Math.pow(1 - travelProgress, 3);
-          const headT = eased;
+          // Head sweeps inward: starts at 0.9 (noise), moves toward 0 (pupil)
+          const headT = 0.9 * (1 - eased);
           const tailSpread = 0.25 + 0.1 * (1 - travelProgress);
-          const tailT = Math.max(0, eased - tailSpread);
+          const tailT = Math.min(0.9, headT + tailSpread);
 
-          // Fading charge glow at origin as bolt launches away
+          // Fading charge glow at outer origin
           const originFade = Math.max(0, 1 - travelProgress * 3);
           if (originFade > 0) {
             const glowSize = 10 + surge.brightness * 4;
             const alpha = surge.brightness * originFade * 0.7;
-            const grad = ctx.createRadialGradient(originX, originY, 0, originX, originY, glowSize);
+            const grad = ctx.createRadialGradient(outerOrigin.x, outerOrigin.y, 0, outerOrigin.x, outerOrigin.y, glowSize);
             grad.addColorStop(0, `rgba(255, 255, 255, ${alpha})`);
             grad.addColorStop(0.4, `rgba(200, 210, 255, ${alpha * 0.5})`);
             grad.addColorStop(1, "rgba(150, 170, 255, 0)");
             ctx.fillStyle = grad;
             ctx.beginPath();
-            ctx.arc(originX, originY, glowSize, 0, Math.PI * 2);
+            ctx.arc(outerOrigin.x, outerOrigin.y, glowSize, 0, Math.PI * 2);
             ctx.fill();
           }
 
-          // Trace the fiber path and draw the traveling bolt
+          // Draw the bolt along the fiber path (inward)
           const segments = 40;
-          for (let s = 0; s < segments; s++) {
+          for (let s = 0; s <= segments; s++) {
             const t = s / segments;
-            if (t < tailT || t > headT) continue;
+            if (t < headT || t > tailT) continue;
 
-            const r = irisInnerR + t * totalLen;
-            const blendWidth = 0.12;
-            const blendStart = innerEnd - blendWidth / 2;
-            const blendEnd2 = innerEnd + blendWidth / 2;
-            let angularOffset: number;
+            const pt = fiberPos(t);
 
-            if (t < blendStart) {
-              const localT = t / innerEnd;
-              const envelope = Math.sin(localT * Math.PI);
-              const wave =
-                Math.sin(localT * f.innerH1 * Math.PI + p + slowT) * f.innerA1 +
-                Math.sin(localT * f.innerH2 * Math.PI + p * 1.7 + slowT * 0.7) * f.innerA2 +
-                Math.sin(localT * f.innerH3 * Math.PI + p * 2.3 + slowT * 0.5) * f.innerA3;
-              angularOffset = (wave * envelope) / r;
-            } else if (t < blendEnd2) {
-              const crossT2 = (t - blendStart) / blendWidth;
-              const crossSmooth = crossT2 * crossT2 * (3 - 2 * crossT2);
-              const innerLocalT = t / innerEnd;
-              const innerEnv = Math.sin(innerLocalT * Math.PI);
-              const innerWave =
-                Math.sin(innerLocalT * f.innerH1 * Math.PI + p + slowT) * f.innerA1 +
-                Math.sin(innerLocalT * f.innerH2 * Math.PI + p * 1.7 + slowT * 0.7) * f.innerA2 +
-                Math.sin(innerLocalT * f.innerH3 * Math.PI + p * 2.3 + slowT * 0.5) * f.innerA3;
-              const midLocalT = Math.max(0, (t - innerEnd) / (midEnd - innerEnd));
-              const midEnv = Math.sin(Math.max(0.001, midLocalT) * Math.PI);
-              const midWave =
-                Math.sin(midLocalT * f.midH1 * Math.PI + p * 0.8 + slowT * 0.8) * f.midA1 +
-                Math.sin(midLocalT * f.midH2 * Math.PI + p * 1.4 + slowT * 0.6) * f.midA2 +
-                Math.sin(midLocalT * f.midH3 * Math.PI + p * 2.0 + slowT * 0.4) * f.midA3;
-              angularOffset = ((innerWave * innerEnv) * (1 - crossSmooth) + (midWave * midEnv) * crossSmooth) / r;
-            } else if (t < midEnd) {
-              const localT = (t - innerEnd) / (midEnd - innerEnd);
-              const envelope = Math.sin(localT * Math.PI);
-              const wave =
-                Math.sin(localT * f.midH1 * Math.PI + p * 0.8 + slowT * 0.8) * f.midA1 +
-                Math.sin(localT * f.midH2 * Math.PI + p * 1.4 + slowT * 0.6) * f.midA2 +
-                Math.sin(localT * f.midH3 * Math.PI + p * 2.0 + slowT * 0.4) * f.midA3;
-              angularOffset = (wave * envelope) / r;
-            } else {
-              const localT2 = (t - midEnd) / (1 - midEnd);
-              const continuation = 1.0 + localT2 * 0.4;
-              const dampen = 1 - localT2 * 0.7;
-              const envelope = Math.sin(continuation * Math.PI) * dampen;
-              const wave =
-                Math.sin(continuation * f.midH1 * Math.PI + p * 0.8 + slowT * 0.8) * f.midA1 +
-                Math.sin(continuation * f.midH2 * Math.PI + p * 1.4 + slowT * 0.6) * f.midA2 +
-                Math.sin(continuation * f.midH3 * Math.PI + p * 2.0 + slowT * 0.4) * f.midA3;
-              angularOffset = (wave * envelope * 0.4) / r;
-            }
-
-            const angle = f.angle + angularOffset;
-            const x = cx + Math.cos(angle) * r;
-            const y = cy + Math.sin(angle) * r;
-
-            // Brightness peaks at head, fades toward tail
-            const span = headT - tailT;
-            const posInBolt = span > 0.001 ? (t - tailT) / span : 0;
-            const headGlow = Math.pow(posInBolt, 1.5); // brighter near head
+            // Brightness peaks at head (inner end), fades toward tail (outer)
+            const span = tailT - headT;
+            const posInBolt = span > 0.001 ? (tailT - t) / span : 0;
+            const headGlow = Math.pow(posInBolt, 1.5);
             const edgeFade = 1 - eased * 0.3;
             const surgeAlpha = Math.max(0, Math.min(1, surge.brightness * headGlow * edgeFade * 0.9));
 
             const glowSize = 3 + surge.brightness * 5 * headGlow;
-            const grad = ctx.createRadialGradient(x, y, 0, x, y, glowSize);
+            const grad = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, glowSize);
             grad.addColorStop(0, `rgba(255, 255, 255, ${surgeAlpha})`);
             grad.addColorStop(0.3, `rgba(200, 210, 255, ${surgeAlpha * 0.6})`);
             grad.addColorStop(1, "rgba(150, 170, 255, 0)");
             ctx.fillStyle = grad;
             ctx.beginPath();
-            ctx.arc(x, y, glowSize, 0, Math.PI * 2);
+            ctx.arc(pt.x, pt.y, glowSize, 0, Math.PI * 2);
             ctx.fill();
           }
         }
