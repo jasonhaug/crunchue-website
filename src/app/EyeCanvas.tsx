@@ -2,7 +2,11 @@
 
 import { useEffect, useRef } from "react";
 
-export default function EyeCanvas() {
+interface EyeCanvasProps {
+  backgroundMode?: boolean;
+}
+
+export default function EyeCanvas({ backgroundMode = false }: EyeCanvasProps = {}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -280,7 +284,7 @@ export default function EyeCanvas() {
     window.addEventListener("resize", resize);
 
     // Zoom and pan state
-    let zoom = 1;
+    let zoom = backgroundMode ? 2.5 : 1;
     let panX = 0;
     let panY = 0;
     let isDragging = false;
@@ -393,14 +397,16 @@ export default function EyeCanvas() {
       lastTouchDist = 0;
     };
 
-    canvas.addEventListener("wheel", onWheel, { passive: false });
-    canvas.addEventListener("mousedown", onMouseDown);
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-    canvas.addEventListener("touchstart", onTouchStart, { passive: false });
-    canvas.addEventListener("touchmove", onTouchMove, { passive: false });
-    canvas.addEventListener("touchend", onTouchEnd);
-    canvas.style.cursor = "grab";
+    if (!backgroundMode) {
+      canvas.addEventListener("wheel", onWheel, { passive: false });
+      canvas.addEventListener("mousedown", onMouseDown);
+      window.addEventListener("mousemove", onMouseMove);
+      window.addEventListener("mouseup", onMouseUp);
+      canvas.addEventListener("touchstart", onTouchStart, { passive: false });
+      canvas.addEventListener("touchmove", onTouchMove, { passive: false });
+      canvas.addEventListener("touchend", onTouchEnd);
+      canvas.style.cursor = "grab";
+    }
 
     const draw = () => {
       try {
@@ -1014,15 +1020,17 @@ export default function EyeCanvas() {
     return () => {
       cancelAnimationFrame(animId);
       window.removeEventListener("resize", resize);
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-      canvas.removeEventListener("wheel", onWheel);
-      canvas.removeEventListener("mousedown", onMouseDown);
-      canvas.removeEventListener("touchstart", onTouchStart);
-      canvas.removeEventListener("touchmove", onTouchMove);
-      canvas.removeEventListener("touchend", onTouchEnd);
+      if (!backgroundMode) {
+        window.removeEventListener("mousemove", onMouseMove);
+        window.removeEventListener("mouseup", onMouseUp);
+        canvas.removeEventListener("wheel", onWheel);
+        canvas.removeEventListener("mousedown", onMouseDown);
+        canvas.removeEventListener("touchstart", onTouchStart);
+        canvas.removeEventListener("touchmove", onTouchMove);
+        canvas.removeEventListener("touchend", onTouchEnd);
+      }
     };
-  }, []);
+  }, [backgroundMode]);
 
   return (
     <canvas
@@ -1034,6 +1042,7 @@ export default function EyeCanvas() {
         height: "100%",
         display: "block",
         background: "#000",
+        pointerEvents: backgroundMode ? "none" : "auto",
       }}
     />
   );
